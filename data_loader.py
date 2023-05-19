@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import interpolate
 import random
+import pandas as pd
 
 bins = 100
 #cutoff = (np.pi*1260)/1400
@@ -14,8 +15,9 @@ test_models = 50
 
 class BXL_DMO_Pk:
 
-    def __init__(self, test_models, bins, cutoff = (0.025, 4.5), cosmo = np.arange(9), pk = 'reg', lin = 'class', boost = True):
+    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'swift', lin = 'class', boost = True):
         self.test_models = test_models
+        self.pk = pk
         
         #The parameters file
         self.parameters = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
@@ -26,22 +28,25 @@ class BXL_DMO_Pk:
         self.parameters_norm = (self.parameters-self.design_min)/(self.design_max-self.design_min)
     
         #Split into test and train data
-        self.test_parameters = self.parameters_norm[self.test_models, :]
-        self.train_parameters = np.delete(self.parameters_norm, self.test_models, axis=0)
-        
-        if pk == 'reg':
-            self.k = np.zeros([150, 435])
-            self.P_k = np.zeros([150, 435])
-        elif pk == 'nbk':
-            self.k = np.zeros([150, 1023])
-            self.P_k = np.zeros([150, 1023])
+        self.X_test = self.parameters_norm[self.test_models, :]
+        self.X_train = np.delete(self.parameters_norm, self.test_models, axis=0)
 
+        if pk == 'swift':
+            array_size = 435
+        elif pk == 'nbk':
+            array_size = 1023
+        elif pk == 'nbk-rebin':
+            df = pd.read_csv("/storage/users/arijsalc/BAHAMAS_XL/DMO/boost_rebinned_21.csv")
+            array_size = 19
+            
+        self.k = np.zeros([150, array_size])
+        self.P_k = np.zeros([150, array_size])
         self.P_k_interp = np.zeros([150, bins])
         self.P_k_nonlinear = np.zeros([150, bins])
 
-        low_k_cut = cutoff[0]
-        high_k_cut = cutoff[1]
-        self.k_test = np.logspace(np.log10(low_k_cut), np.log10(high_k_cut), bins)
+        self.low_k_cut = cutoff[0]
+        self.high_k_cut = cutoff[1]
+        self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), bins)
 
         if lin == 'camb':
             self.k_camb_linear = np.logspace(-3, np.log10(50), 300)
@@ -54,21 +59,25 @@ class BXL_DMO_Pk:
         
             print('model = ' + str(i))
             if i in np.arange(0, 50):
-                size = 700
+                boxsize = 700
             elif i in np.arange(50, 100):
-                size = 1400
+                boxsize = 1400
             elif i in np.arange(100, 150):
-                size = 350
+                boxsize = 350
 
-            if pk == 'reg':
-                self.k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{size}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 1)
+            if pk == 'swift':
+                self.k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 1)
 
-                self.P_k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{size}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 2)
+                self.P_k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 2)
 
             elif pk == 'nbk':
-                self.k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{size}" + '_DMO/PS/PS_k_078.csv', skiprows = 1, usecols = 0)*(self.parameters[i, 2])
+                self.k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/PS/PS_k_078.csv', skiprows = 1, usecols = 0)*(self.parameters[i, 2])
                 
-                self.P_k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{size}" + '_DMO/PS/PS_k_078.csv', skiprows = 1, usecols = 1)/(self.parameters[i, 2]**3)
+                self.P_k[i, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/PS/PS_k_078.csv', skiprows = 1, usecols = 1)/(self.parameters[i, 2]**3)
+
+            elif pk == 'nbk-rebin':
+                self.k[i, :] = df['k'][19*i:19*(i+1)] 
+                self.P_k[i, :] = df['boost'][19*i:19*(i+1)] 
                 
             h = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic')#, fill_value="extrapolate") #if pk == 'nbk' else 'nan')
             self.P_k_interp[i, :] = h(self.k_test)
@@ -81,21 +90,24 @@ class BXL_DMO_Pk:
                 y = f(self.k_test)
 
             elif lin == 'class':
-                self.P_k_class_linear[i, :, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" +'_N1260_L' + f"{size}" + '_DMO/class_linear_spectra_z_0.txt', skiprows=2, usecols=(0, 2))
+                self.P_k_class_linear[i, :, :] = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" +'_N1260_L' + f"{boxsize}" + '_DMO/class_linear_spectra_z_0.txt', skiprows=2, usecols=(0, 2))
 
                 f = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
                 y = f(self.k_test)
 
-            if boost == True:
-                self.P_k_nonlinear[i, :] = self.P_k_interp[i, :] / y
-            elif boost == False:
-                self.P_k_nonlinear[i, :] = self.P_k_interp[i, :]
+            if pk == 'nbk-rebin':
+                self.P_k_nonlinear = self.P_k_interp
+            else:
+                if boost == True:
+                    self.P_k_nonlinear[i, :] = self.P_k_interp[i, :] / y
+                elif boost == False:
+                    self.P_k_nonlinear[i, :] = self.P_k_interp[i, :]
 
-        self.P_k_nonlinear_test = self.P_k_nonlinear[self.test_models, :]
+        self.Y_test = self.P_k_nonlinear[self.test_models, :]
         self.P_k_nonlinear_train = np.delete(self.P_k_nonlinear, self.test_models, axis=0)
         
         #Log of non-linear boost
-        self.P_k_nonlinear_train_log = np.log10(self.P_k_nonlinear_train)
+        self.Y_train = np.log10(self.P_k_nonlinear_train)
         self.k_ind = np.linspace(0, 1, bins)
         #k_z0_test_array = np.repeat(k_z0_test, np.size(P_k_z0_nonlinear_train_log, 0), axis=0).reshape(-1, 100)
         #print(k_z0_test_array)
@@ -118,26 +130,26 @@ class BXL_DMO_Pk:
                     u+=1
                     k_plot = self.k[i, :u]
             e = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
-            p = f(k_plot)
+            p = e(k_plot)
 
             plt.figure(1)
             if i in range(50):
-                plt.plot(k_plot, self.P_k[i, :u]/p, color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
             elif i in range(50, 100):
-                plt.plot(k_plot, self.P_k[i, :u]/p, color='tab:orange', label=('Models 050-099' if i==50 else None))
+                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:orange', label=('Models 050-099' if i==50 else None))
             elif i in range(100, 150):
-                plt.plot(k_plot, self.P_k[i, :u]/p, color='tab:green', label=('Models 100-149' if i==100 else None))
+                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:green', label=('Models 100-149' if i==100 else None))
 
             plt.figure(2)
             if i in range(50):
                 k_fund = (2*np.pi)/700
-                plt.plot(k_plot/k_fund, P_k[i, :u]/p, color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
             elif i in range(50, 100):
                 k_fund = (2*np.pi)/1400
-                plt.plot(k_plot/k_fund, P_k_z0[:u]/p, color='tab:orange', label=('Models 050-099' if i==50 else None))
+                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:orange', label=('Models 050-099' if i==50 else None))
             elif i in range(100, 150):
                 k_fund = (2*np.pi)/350
-                plt.plot(k_plot/k_fund, P_k_z0[:u]/p, color='tab:green', label=('Models 100-149' if i==100 else None))
+                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:green', label=('Models 100-149' if i==100 else None))
 
         plt.figure(1)
         plt.title('Boost function vs k for all models', fontsize=10, wrap=True)
@@ -146,7 +158,7 @@ class BXL_DMO_Pk:
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
-        plt.savefig('./Plots/Power_spectra_z0_predicted_boostvk.pdf', dpi=800)
+        plt.savefig('./Plots/Classbased_BOOSTVK.pdf', dpi=800)
         plt.clf()
         
         plt.figure(2)
@@ -156,7 +168,7 @@ class BXL_DMO_Pk:
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
-        plt.savefig('./Plots/Power_spectra_z0_predicted_boostvkfund.pdf', dpi=800)
+        plt.savefig('./Plots/Classbased_BOOSTVKFUND.pdf', dpi=800)
         plt.clf()
         
         plt.figure(3)
@@ -166,7 +178,7 @@ class BXL_DMO_Pk:
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
-        plt.savefig('./Plots/Power_spectra_z0_predicted_testcase.pdf', dpi=800)
+        plt.savefig('./Plots/Classbased_TESTCASE.pdf', dpi=800)
         plt.clf()
 
                 
@@ -187,8 +199,13 @@ class BXL_DMO_Pk:
             
         
 if __name__ == "__main__":
-    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk')
-    print(nbk_boost.test_models)
-    print(nbk_boost.test_parameters)
+    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin')
+    print(nbk_boost.k)
+    print(nbk_boost.P_k)
     print(nbk_boost.k_test)
-    print(nbk_boost.P_k_nonlinear_test)
+    print(nbk_boost.test_models)
+    print(nbk_boost.X_train)
+    print(nbk_boost.Y_train)
+    print(nbk_boost.X_test)
+    print(nbk_boost.Y_test)
+
