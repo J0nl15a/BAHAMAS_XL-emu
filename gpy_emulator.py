@@ -9,33 +9,149 @@ linear = GPy.kern.Linear(9)
 polynomial = GPy.kern.Poly(9)
 RBF = GPy.kern.RBF(9)
 Bias = GPy.kern.Bias(9)
+ARD = GPy.kern.RBF(9, ARD=True)
 
 class gpy_emulator:
 
-    def __init__(self, P_k_data, kern):
+    def __init__(self, P_k_data, kern, var_fix = False):
         self.test_models = P_k_data.test_models
+        self.kern = kern
 
-        self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, P_k_data.Y_train, kern)
+        self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train[:99, :], P_k_data.Y_train[:99, :], self.kern)
+        if var_fix == True:
+            self.model.het_Gauss.variance[:49] = 10
+            self.model.het_Gauss.variance[49:] = 0.01
+            self.model.het_Gauss.variance[49:].fix()
+        elif var_fix == False:
+            pass
         self.model.optimize()
-        self.y = self.model.predict(P_k_data.X_test.reshape(-1, 1))
+        self.y = 10**(self.model._raw_predict(P_k_data.X_test.reshape(1, -1))[0])
+        self.error = self.y/P_k_data.Y_test
 
-    def plot(self):
-        self.model.plot()
-        pb.errorbar(P_k_data.X_train, P_k_data.Y_train, yerr=np.array(self.model.likelihood.flattened_parameters).flatten(), fmt=None, ecolor='r', zorder=1)
+        return    
 
-        pb.title('GPy test 1 (kernel = ' + f"{kern}" + ')')
+    def plot(self, P_k_data, name):
+        pb.plot(P_k_data.k_test, P_k_data.Y_test, color='b', label=('True Non-linear P(k) for model_' + f"{self.test_models:03d}"))
+        pb.plot(P_k_data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted Non-linear P(k) for model_' + f"{self.test_models:03d}"))
+
+        pb.title('GPy test (kernel = ' + f"{name}" + ')')
         pb.xlabel('k (1/Mpc)')
         pb.ylabel('P(k) (Mpc^3)')
         pb.xscale('log')
         pb.yscale('log')
+        pb.legend()
+        pb.savefig(f'./Plots/gpy_test_{name}.pdf', dpi=800)
+        pb.clf()
 
-        pb.savefig('./Plots/gpy_test_1.pdf', dpi=800)
+        
+        pb.hlines(y=1.000, xmin=-1, xmax=max(P_k_data.k_test)+1, color='k', linestyles='solid', alpha=0.5, label=None)
+        pb.hlines(y=0.990, xmin=-1, xmax=max(P_k_data.k_test)+1, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+        pb.hlines(y=1.010, xmin=-1, xmax=max(P_k_data.k_test)+1, color='k', linestyles='dashed', alpha=0.5, label=None)
+        pb.hlines(y=0.950, xmin=-1, xmax=max(P_k_data.k_test)+1, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+        pb.hlines(y=1.050, xmin=-1, xmax=max(P_k_data.k_test)+1, color='k', linestyles='dotted', alpha=0.5, label=None)
+        pb.plot(P_k_data.k_test, self.error.reshape(-1,1), label=('Residual error for model_' + f"{self.test_models:03d}"))
+        pb.title('GPy error test (kernel = ' + f"{name}" + ')')
+        pb.xlabel('k (1/Mpc)')
+        pb.ylabel('Residual error')
+        pb.xscale('log')
+        pb.legend()
+        pb.savefig(f'./Plots/gpy_test_error_{name}.pdf', dpi=800)
+        pb.clf()
+
+        return
 
 if __name__ == "__main__":
-    test_model = random.randint(0, 149)
-    nbk_boost = BXL_DMO_Pk(test_model, 100, pk = 'nbk-rebin')
-    gpy = gpy_emulator(nbk_boost, linear)
+    #test_model = random.randint(0, 149)
+    test_model = random.randint(0, 49)
+    nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin', lin='rebin', extrap=True)
+    nbk_boost.plot_k()
+    gpy_rbf = gpy_emulator(nbk_boost, RBF)
+    gpy_ard = gpy_emulator(nbk_boost, ARD)
+    gpy_rbf_fix = gpy_emulator(nbk_boost, RBF, var_fix = True)
+    gpy_ard_fix = gpy_emulator(nbk_boost, ARD, var_fix = True)
+    #gpy_bias = gpy_emulator(nbk_boost, Bias)
+    #gpy_poly = gpy_emulator(nbk_boost, polynomial)
+    #gpy_lin = gpy_emulator(nbk_boost, linear)
+    #gpy_mlp = gpy_emulator(nbk_boost, mlp)
 
-    print(gpy.model.kern)
-    print(gpy.y)
+    #gpy_rbf_bias_a = gpy_emulator(nbk_boost, RBF+Bias)
+    #gpy_rbf_mlp_a = gpy_emulator(nbk_boost, RBF+mlp)
+    #gpy_rbf_poly_a = gpy_emulator(nbk_boost, RBF+polynomial)
+    #gpy_rbf_lin_a = gpy_emulator(nbk_boost, RBF+linear)
+
+    #gpy_rbf_bias_m = gpy_emulator(nbk_boost, RBF*Bias)
+    #gpy_rbf_mlp_m = gpy_emulator(nbk_boost, RBF*mlp)
+    #gpy_rbf_poly_m = gpy_emulator(nbk_boost, RBF*polynomial)
+    #gpy_rbf_lin_m = gpy_emulator(nbk_boost, RBF*linear)
     
+    print(gpy_rbf.model.kern)
+    print(gpy_rbf.error)
+    gpy_rbf.plot(nbk_boost, 'RBF')
+    print(gpy_ard.model.kern)
+    print(gpy_ard.error)
+    gpy_ard.plot(nbk_boost, 'RBF(ARD)')
+    gpy_rbf_fix.plot(nbk_boost, 'RBF fixed var')
+    gpy_ard_fix.plot(nbk_boost, 'RBF(ARD) fixed var')
+    #gpy_bias.plot(nbk_boost, 'Bias')
+    #gpy_poly.plot(nbk_boost, 'Polynomial')
+    #gpy_lin.plot(nbk_boost, 'Linear')
+    #gpy_mlp.plot(nbk_boost, 'MLP')
+    
+    #gpy_rbf_bias_a.plot(nbk_boost, 'RBF+Bias')
+    #gpy_rbf_mlp_a.plot(nbk_boost, 'RBF+MLP')
+    #gpy_rbf_poly_a.plot(nbk_boost, 'RBF+Polynomial')
+    #gpy_rbf_lin_a.plot(nbk_boost, 'RBF+Linear')
+
+    #gpy_rbf_bias_m.plot(nbk_boost, 'RBFxBias')
+    #gpy_rbf_mlp_m.plot(nbk_boost, 'RBFxMLP')
+    #gpy_rbf_poly_m.plot(nbk_boost, 'RBFxPolynomial')
+    #gpy_rbf_lin_m.plot(nbk_boost, 'RBFxLinear')
+
+    #mean_error0 = []
+    #for i in range(5):
+        #test_model = random.randint(0, 149)
+        #boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin', lin='rebin')
+        #grbf = gpy_emulator(boost, RBF)
+        #gbias = gpy_emulator(nbk_boost, Bias)
+        #gpoly = gpy_emulator(nbk_boost, polynomial)
+        #glin = gpy_emulator(nbk_boost, linear)
+        #gmlp = gpy_emulator(nbk_boost, mlp)
+        
+        #grbf_bias_a = gpy_emulator(nbk_boost, RBF+Bias)
+        #grbf_mlp_a = gpy_emulator(nbk_boost, RBF+mlp)
+        #grbf_poly_a = gpy_emulator(nbk_boost, RBF+polynomial)
+        #grbf_lin_a = gpy_emulator(nbk_boost, RBF+linear)
+        
+        #grbf_bias_m = gpy_emulator(nbk_boost, RBF*Bias)
+        #grbf_mlp_m = gpy_emulator(nbk_boost, RBF*mlp)
+        #grbf_poly_m = gpy_emulator(nbk_boost, RBF*polynomial)
+        #grbf_lin_m = gpy_emulator(nbk_boost, RBF*linear)
+        
+        #mean_error0.append(grbf.error.reshape(-1,1))
+        
+        
+    #pb.hlines(y=1.000, xmin=-1, xmax=nbk_boost.high_k_cut+1, color='k', linestyles='solid', alpha=0.5, label=None)
+    #pb.hlines(y=0.990, xmin=-1, xmax=nbk_boost.high_k_cut+1, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+    #pb.hlines(y=1.010, xmin=-1, xmax=nbk_boost.high_k_cut+1, color='k', linestyles='dashed', alpha=0.5, label=None)
+    #pb.hlines(y=0.950, xmin=-1, xmax=nbk_boost.high_k_cut+1, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+    #pb.hlines(y=1.050, xmin=-1, xmax=nbk_boost.high_k_cut+1, color='k', linestyles='dotted', alpha=0.5, label=None)
+    #pb.plot(nbk_boost.k_test, gpy_rbf.error.reshape(-1,1), label=('kernel = RBF'), linestyle='solid', color='b')
+    #pb.plot(nbk_boost.k_test, gpy_lin.error.reshape(-1,1), label=('kernel = Linear'), linestyle='solid', color='g')
+    #pb.plot(nbk_boost.k_test, gpy_poly.error.reshape(-1,1), label=('kernel = Polynomial'), linestyle='solid', color='r')
+    #pb.plot(nbk_boost.k_test, gpy_mlp.error.reshape(-1,1), label=('kernel = MLP'), linestyle='solid', color='m')
+    #pb.plot(nbk_boost.k_test, gpy_bias.error.reshape(-1,1), label=('kernel = Bias'), linestyle='solid', color='c')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_bias_a.error.reshape(-1,1), label=('kernel = RBF+Bias'), linestyle='dashed', color='c')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_lin_a.error.reshape(-1,1), label=('kernel = RBF+Linear'), linestyle='dashed', color='g')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_poly_a.error.reshape(-1,1), label=('kernel = RBF+Polynomial'), linestyle='dashed', color='r')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_mlp_a.error.reshape(-1,1), label=('kernel = RBF+MLP'), linestyle='dashed', color='m')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_bias_m.error.reshape(-1,1), label=('kernel = RBF*Bias'), linestyle='dotted', color='c')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_lin_m.error.reshape(-1,1), label=('kernel = RBF*Linear'), linestyle='dotted', color='g')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_poly_m.error.reshape(-1,1), label=('kernel = RBF*Polynomial'), linestyle='dotted', color='r')
+    #pb.plot(nbk_boost.k_test, gpy_rbf_mlp_m.error.reshape(-1,1), label=('kernel = RBF*MLP'), linestyle='dotted', color='m')
+    #pb.title('GPy error test (model_' + f"{test_model}" + ')' )
+    #pb.xlabel('k (1/Mpc)')
+    #pb.ylabel('Residual error')
+    #pb.xscale('log')
+    #pb.legend(fontsize=5, ncols=4)
+    #pb.savefig(f'./Plots/gpy_test_error_comparison.pdf', dpi=800)
+    #pb.clf()

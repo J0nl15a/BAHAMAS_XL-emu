@@ -3,24 +3,20 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 import random
 import pandas as pd
-
-bins = 100
-#cutoff = (np.pi*1260)/1400
-
-#test_model = [3, 12, 18, 90, 138]
-#test_models = random.randint(0, 149)
-test_models = 50
-#test_model = 11
+from pade import pade
 
 
 class BXL_DMO_Pk:
 
-    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'swift', lin = 'class', boost = True):
+    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'swift', lin = 'class', boost = True, extrap = False, add_pade = False):
         self.test_models = test_models
+        self.bins = bins
         self.pk = pk
+        self.extrap = extrap
         
         #The parameters file
-        self.parameters = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
+        #self.parameters = np.loadtxt('/storage/users/arijsalc/BAHAMAS_XL/DMO/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
+        self.parameters = np.loadtxt('./BXL_data/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
 
         #Normalize the design to be between 0,1
         self.design_max = np.max(self.parameters, 0)
@@ -36,23 +32,25 @@ class BXL_DMO_Pk:
         elif pk == 'nbk':
             array_size = 1023
         elif pk == 'nbk-rebin':
-            df = pd.read_csv("/storage/users/arijsalc/BAHAMAS_XL/DMO/boost_rebinned_21.csv")
+            df = pd.read_csv("./BXL_data/boost_rebinned_21.csv")
             array_size = 19
             
         self.k = np.zeros([150, array_size])
         self.P_k = np.zeros([150, array_size])
-        self.P_k_interp = np.zeros([150, bins])
-        self.P_k_nonlinear = np.zeros([150, bins])
+        self.P_k_interp = np.zeros([150, self.bins])
+        self.P_k_nonlinear = np.zeros([150, self.bins])
 
         self.low_k_cut = cutoff[0]
         self.high_k_cut = cutoff[1]
-        self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), bins)
+        self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
 
         if lin == 'camb':
             self.k_camb_linear = np.logspace(-3, np.log10(50), 300)
             self.P_k_camb_linear = np.loadtxt('/home/arijconl/BAHAMAS_XL/pk_lin_camb2022_slhs_nested_3x50_kmax_50_running_w0_m1p2_m0p6_wa_m1p6_p0p5.txt', skiprows=index, max_rows=1)
         elif lin == 'class':
             self.P_k_class_linear = np.zeros((150, 400, 2))
+        elif lin == 'rebin':
+            pass
     
         #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
         for i in range(150):
@@ -78,8 +76,19 @@ class BXL_DMO_Pk:
             elif pk == 'nbk-rebin':
                 self.k[i, :] = df['k'][19*i:19*(i+1)] 
                 self.P_k[i, :] = df['boost'][19*i:19*(i+1)] 
+
+            if extrap == False:
+                pass
+            else:
+                self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(10), self.bins)
+
+            if add_pade == False:
+                h = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic', fill_value="extrapolate" if extrap == True else 'nan')
+            elif add_pade == True:
+                print(self.k[i, -4:-1], self.P_k[i, -4:-1])
+                h = pade.fit(self.k[i, -4:-1], self.P_k[i, -4:-1])
+                print(self.k_test[-4:-1], h(self.k_test))
                 
-            h = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic')#, fill_value="extrapolate") #if pk == 'nbk' else 'nan')
             self.P_k_interp[i, :] = h(self.k_test)
         
             if lin == 'camb':
@@ -108,48 +117,42 @@ class BXL_DMO_Pk:
         
         #Log of non-linear boost
         self.Y_train = np.log10(self.P_k_nonlinear_train)
-        self.k_ind = np.linspace(0, 1, bins)
+        self.k_ind = np.linspace(0, 1, self.bins)
         #k_z0_test_array = np.repeat(k_z0_test, np.size(P_k_z0_nonlinear_train_log, 0), axis=0).reshape(-1, 100)
         #print(k_z0_test_array)
             
 
     def plot_k(self):
 
-        for i in range(150):
+        for i in range(50):
             plt.figure(3)
-            if i in range(50):
-                plt.plot(self.k_test, self.P_k_interp[i, :], color = 'tab:blue', label=('Models 000-049' if i==0 else None))
-            elif i in range(50, 100):
-                plt.plot(self.k_test, self.P_k_interp[i, :], color = 'tab:orange', label=('Models 050-099' if i==50 else None))
-            elif i in range(100, 150):
-                plt.plot(self.k_test, self.P_k_interp[i, :], color = 'tab:green', label=('Models 100-149' if i==100 else None))
+            plt.plot(self.k_test, self.P_k_interp[i, :], color = 'tab:blue', label=('Models 000-049' if i==0 else None))
+            plt.plot(self.k_test, self.P_k_interp[i+50, :], color = 'tab:orange', label=('Models 050-099' if i==0 else None))
+            plt.plot(self.k_test, self.P_k_interp[i+100, :], color = 'tab:green', label=('Models 100-149' if i==0 else None))
 
-            u=0
-            for t in self.k[i, :]:
-                if t <= max(self.P_k_class_linear[i, :, 0]):
-                    u+=1
-                    k_plot = self.k[i, :u]
-            e = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
-            p = e(k_plot)
+            ###Plotting function broken for now###
+            if self.extrap == False:
+                u=0
+                for t in self.k[i+(q*50), :]:
+                    if t <= max(self.P_k_class_linear[i+(q*50), :, 0]):
+                        u+=1
+                        k_plot = self.k[i, :u]
+                e = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
+                p = e(k_plot)
+                ######################################
+            elif self.extrap == True:
+                u=self.bins
 
             plt.figure(1)
-            if i in range(50):
-                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
-            elif i in range(50, 100):
-                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:orange', label=('Models 050-099' if i==50 else None))
-            elif i in range(100, 150):
-                plt.plot(k_plot, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:green', label=('Models 100-149' if i==100 else None))
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i, :]), (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i+50, :]), (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i+50, :u]), color='tab:orange', label=('Models 050-099' if i==0 else None))
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i+100, :]), (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i+100, :u]), color='tab:green', label=('Models 100-149' if i==0 else None))
 
             plt.figure(2)
-            if i in range(50):
-                k_fund = (2*np.pi)/700
-                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
-            elif i in range(50, 100):
-                k_fund = (2*np.pi)/1400
-                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:orange', label=('Models 050-099' if i==50 else None))
-            elif i in range(100, 150):
-                k_fund = (2*np.pi)/350
-                plt.plot(k_plot/k_fund, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:green', label=('Models 100-149' if i==100 else None))
+            k_fund_low = (2*np.pi)/1400
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i, :])/(k_fund_low*2), (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i, :u]), color='tab:blue', label=('Models 000-049' if i==0 else None))
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i+50, :])/k_fund_low, (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i+50, :u]), color='tab:orange', label=('Models 050-099' if i==0 else None))
+            plt.plot((k_plot if self.pk != 'nbk-rebin' else self.k[i+100, :])/(k_fund_low*4), (self.P_k[i, :u]/p if self.pk != 'nbk-rebin' else self.P_k[i+100, :u]), color='tab:green', label=('Models 100-149' if i==0 else None))
 
         plt.figure(1)
         plt.title('Boost function vs k for all models', fontsize=10, wrap=True)
@@ -199,7 +202,15 @@ class BXL_DMO_Pk:
             
         
 if __name__ == "__main__":
-    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin')
+    bins = 100
+    #cutoff = (np.pi*1260)/1400
+
+    #test_model = [3, 12, 18, 90, 138]
+    test_models = random.randint(0, 149)
+    #test_models = 50
+    #test_model = 11
+    
+    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin', lin = 'rebin', extrap = True, add_pade = True)
     print(nbk_boost.k)
     print(nbk_boost.P_k)
     print(nbk_boost.k_test)
@@ -208,4 +219,5 @@ if __name__ == "__main__":
     print(nbk_boost.Y_train)
     print(nbk_boost.X_test)
     print(nbk_boost.Y_test)
+    nbk_boost.plot_k()
 
