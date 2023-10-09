@@ -7,7 +7,7 @@ from sepia.SepiaPredict import SepiaEmulatorPrediction
 import sepia.SepiaSensitivity as SepiaSensitivity
 from data_loader import BXL_DMO_Pk
 import random
-from emu_extension import HR_emulator, LR_emulator
+from sepia_emu_extension import sepia_HR_emulator, sepia_LR_emulator
 
 #Some setup parameters for the model that I don't really touch now
 pc = 3
@@ -257,9 +257,10 @@ if __name__ == "__main__":
     #test_model = random.randint(0, 149)    
     test_model = 5
     nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin', lin='rebin')
-    HR_extend = HR_emulator(nbk_boost)
-    LR_extend = LR_emulator(nbk_boost)
-    sepia = sepia_emulator(nbk_boost, method='rag-obs', extension=(HR_extend, LR_extend))
+    #HR_extend = HR_emulator(nbk_boost)
+    #LR_extend = LR_emulator(nbk_boost)
+    #sepia = sepia_emulator(nbk_boost, method='rag-obs', extension=(HR_extend, LR_extend))
+    sepia = sepia_emulator(nbk_boost)
 
     print(sepia.data)
     print(sepia.error)

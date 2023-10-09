@@ -5,7 +5,7 @@ from sepia.SepiaModel import SepiaModel
 from sepia.SepiaPredict import SepiaEmulatorPrediction
 import random
 
-class HR_emulator:
+class sepia_HR_emulator:
 
     def __init__(self, P_k_data, pc=0.999, samp=50, step=20, mcmc=1000):
         self.test_models = P_k_data.test_models
@@ -46,7 +46,7 @@ class HR_emulator:
 
         return
 
-class LR_emulator:
+class sepia_LR_emulator:
 
     def __init__(self, P_k_data, pc=0.999, samp=50, step=20, mcmc=1000):
         self.test_models = P_k_data.test_models
@@ -87,7 +87,7 @@ class LR_emulator:
             
         return
 
-class MR_step_emulator:
+class sepia_MR_step_emulator:
 
     def __init__(self, P_k_data, HL=False, LH=False, pc=0.999, samp=50, step=20, mcmc=1000):
         self.test_models = P_k_data.test_models
