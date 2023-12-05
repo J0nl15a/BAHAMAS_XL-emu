@@ -4,6 +4,7 @@ import pylab as pb
 from data_loader import BXL_DMO_Pk
 import random
 import pickle
+import matplotlib.figure as fi
 
 mlp = GPy.kern.MLP(9)
 linear = GPy.kern.Linear(9)
@@ -17,10 +18,12 @@ class gpy_emulator:
     def __init__(self, P_k_data, kern, var_fix=False, single_k='nan', var=(1,10,.1), save=False, upload=False):
         self.test_models = P_k_data.test_models
         self.kern = kern
+        self.error = np.zeros((len(P_k_data.Y_test), 1))
 
         if upload == True:
             self.model = pickle.load(open("gpy_model.pkl", "rb"))
         else:
+            print(np.reshape(P_k_data.Y_train[47:50, single_k], (3,1)))
             self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, (np.reshape(P_k_data.Y_train[:, single_k], (len(P_k_data.Y_train),1)) if isinstance(single_k, int) else P_k_data.Y_train), self.kern)
             #self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, np.reshape(P_k_data.Y_train[:, single_k], (149,1)), self.kern)
             if var_fix == True:
@@ -41,52 +44,64 @@ class gpy_emulator:
                 pass
             self.model.optimize()
         self.y = 10**(self.model._raw_predict(P_k_data.X_test.reshape(1, -1))[0])
+        self.post_var = self.model._raw_predict(P_k_data.X_test.reshape(1, -1))[1][0]
         if save == True:
             pickle.dump(self.model, open("gpy_model.pkl", "wb"))
         if P_k_data.Y_test.ndim > 1:
             for w in range(len(P_k_data.Y_test)):
-                self.error = self.y/(P_k_data.Y_test[w, single_k] if isinstance(single_k, int) else P_k_data.Y_test[w, :])
+                self.error[w, :] = self.y/(P_k_data.Y_test[w, single_k] if isinstance(single_k, int) else P_k_data.Y_test[w, :])
         else:
             self.error = self.y/(P_k_data.Y_test[single_k] if isinstance(single_k, int) else P_k_data.Y_test)
 
         return    
 
-    def plot(self, P_k_data, name):
-        pb.plot(P_k_data.k_test, P_k_data.Y_test, color='b', label=('True Non-linear P(k) for model_' + f"{self.test_models:03d}"))
-        pb.plot(P_k_data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted Non-linear P(k) for model_' + f"{self.test_models:03d}"))
+    def plot(self, P_k_data, name, plot_file='pdf'):
+        w,h=fi.figaspect(.3)
+        fig, (ax1, ax2) = pb.subplots(1, 2, figsize=(w,h))
+        ax1.plot(P_k_data.k_test, P_k_data.Y_test, color='b', label=('True P(k) for model_' + f"{self.test_models:03d}"))
+        ax1.plot(P_k_data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted P(k) for model_' + f"{self.test_models:03d}"))
 
-        pb.title('GPy test (kernel = ' + f"{name}" + ')')
-        pb.xlabel('k (1/Mpc)')
-        pb.ylabel('P(k) (Mpc^3)')
-        pb.xscale('log')
-        pb.yscale('log')
-        pb.legend()
-        pb.savefig(f'./Plots/gpy_test_{name}.pdf', dpi=800)
-        pb.clf()
+        fig.suptitle('GPy test (kernel = ' + f"{name}" + ')')
+        ax1.set_xlabel('k (1/Mpc)')
+        ax1.set_ylabel('P(k) (Mpc^3)')
+        ax1.set_xscale('log')
+        ax1.set_yscale('log')
+        ax1.legend()
+        ax1.set_xlim(right=10)
+        #pb.savefig(f'./Plots/gpy_test_{name}.pdf', dpi=800)
+        #pb.clf()
 
         
-        pb.hlines(y=1.000, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-        pb.hlines(y=0.990, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-        pb.hlines(y=1.010, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-        pb.hlines(y=0.950, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-        pb.hlines(y=1.050, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-        pb.plot(P_k_data.k_test, self.error.reshape(-1,1), label=('Residual error for model_' + f"{self.test_models:03d}"))
-        pb.title('GPy error test (kernel = ' + f"{name}" + ')')
-        pb.xlabel('k (1/Mpc)')
-        pb.ylabel('Residual error')
-        pb.xscale('log')
-        pb.legend()
-        pb.xlim(right=10)
-        pb.savefig(f'./Plots/gpy_test_error_{name}.pdf', dpi=800)
+        ax2.hlines(y=1.000, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
+        ax2.hlines(y=0.990, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+        ax2.hlines(y=1.010, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
+        ax2.hlines(y=0.950, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+        ax2.hlines(y=1.050, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
+        ax2.plot(P_k_data.k_test, self.error.reshape(-1,1), label=('model_' + f"{self.test_models:03d}" + ' error'))
+        #pb.title('GPy error test (kernel = ' + f"{name}" + ')')
+        ax2.set_xlabel('k (1/Mpc)')
+        ax2.set_ylabel('Residual error')
+        ax2.set_xscale('log')
+        ax2.legend()
+        ax2.set_xlim(right=10)
+        if max(self.error.reshape(-1,1)) > 1.2 and min(self.error.reshape(-1,1)) < 0.8:
+            ax2.set_ylim(top=1.2, bottom=0.8)
+        elif min(self.error.reshape(-1,1)) < 0.8:
+            ax2.set_ylim(bottom=0.8)
+        elif max(self.error.reshape(-1,1)) > 1.2:
+            ax2.set_ylim(top=1.2)
+        fig.subplots_adjust(wspace=0.15)
+        pb.savefig(f'./Plots/gpy_test_error_{name}.{plot_file}', dpi=1200)
         pb.clf()
 
         return
 
 if __name__ == "__main__":
     #test_model = random.randint(0, 149)
-    test_model = random.randint(0, 49)
+    test_model = random.randint(0, 149)
+    print('Model = ' + str(test_model))
     nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin-std', lin='rebin', pad=True)
-    nbk_boost.plot_k()
+    #nbk_boost.plot_k()
     print(nbk_boost.modes)
     gpy_rbf = gpy_emulator(nbk_boost, RBF)
     gpy_ard = gpy_emulator(nbk_boost, ARD)
@@ -112,7 +127,7 @@ if __name__ == "__main__":
     gpy_rbf.plot(nbk_boost, 'RBF')
     print(gpy_ard.model.kern)
     print(gpy_ard.error)
-    gpy_ard.plot(nbk_boost, 'RBF(ARD)')
+    gpy_ard.plot(nbk_boost, 'RBF(ARD)', 'png')
     gpy_rbf_fix.plot(nbk_boost, 'RBF fixed var')
     gpy_ard_fix.plot(nbk_boost, 'RBF(ARD) fixed var')
     #gpy_bias.plot(nbk_boost, 'Bias')

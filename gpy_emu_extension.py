@@ -23,7 +23,9 @@ class gpy_HR_emulator:
                 start = 100
                 end = 150
 
-            if test == True:
+            if test == False:
+                pass
+            else:
                 if self.data.test_models in range(100):
                     HR -= 1
                 if self.data.test_models in range(start, end):
@@ -79,8 +81,10 @@ class gpy_LR_emulator:
             elif t == 'Low':
                 start = 50
                 end = 100
-
-            if test == True:
+            
+            if test == False:
+                pass
+            else:
                 if self.data.test_models in range(50, 100):
                     LR[1] -= 1
                 elif self.data.test_models in range(50):
@@ -95,6 +99,7 @@ class gpy_LR_emulator:
 
             LR_model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[LR[0]:LR[1], :], self.data.Y_train[LR[0]:LR[1], :], kern)
             LR_model.optimize()
+            print(self.data.X_train[start:end, :].shape)
             y = LR_model._raw_predict(self.data.X_train[start:end, :].reshape((end-start), -1))[0]
             #print(y[:, :k])
         

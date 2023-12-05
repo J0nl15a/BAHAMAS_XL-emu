@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import camb
+import pylab as pb
 
 pars = camb.CAMBparams()
 pars.set_cosmology(H0=68.1, ombh2=0.0225387846, omch2=0.11872745361)
@@ -18,3 +19,7 @@ file = open(r'./BXL_data/FLAMINGO_camb_pk.txt', 'w')
 np.savetxt('./BXL_data/FLAMINGO_camb_pk.txt', np.column_stack([kh,pk.reshape(-1,1)]))
 file.close()
 
+f_1GpcHR = open(r'./BXL_data/input_powerspec_L1000N3600.txt', 'rb')
+
+pb.plot(kh, pk, label='CAMB spectra')
+pb.plot(f_1GpcHR[0], )

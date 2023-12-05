@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import pylab as pb
+import matplotlib.figure as fi
 from GPy import kern
 from data_loader import BXL_DMO_Pk
 from gpy_emulator import gpy_emulator
@@ -13,7 +14,7 @@ errors = []
 
 class gpy_single_k_emu:
     
-    def __init__(self, data, plot=False, adap_var=True):
+    def __init__(self, data, adap_var=True, set_var='nan'):
         self.y = []
         self.error = []
         self.data = data
@@ -23,21 +24,24 @@ class gpy_single_k_emu:
             print(i)
             print(m)
             if adap_var == True:
-                if m <= .1:
-                    if i == 0:
-                        self.var=(100,100,100)
-                    elif i == 1:
-                        self.var=(100,1/(math.sqrt(data.modes['Low res'][i])),100)
-                    elif i == 2:
-                        self.var=(1/(math.sqrt(data.modes['Med res'][i])),1/(math.sqrt(data.modes['Low res'][i])),100)
+                if set_var == 'nan':
+                    if m <= .1:
+                        if i == 0:
+                            self.var=(100,100,100)
+                        elif i == 1:
+                            self.var=(100,1/(math.sqrt(data.modes['Low res'][i])),100)
+                        elif i == 2:
+                            self.var=(1/(math.sqrt(data.modes['Med res'][i])),1/(math.sqrt(data.modes['Low res'][i])),100)
+                        else:
+                            #var=(1,10,.01)
+                            self.var = (1/(math.sqrt(data.modes['Med res'][i])), 1/(math.sqrt(data.modes['Low res'][i])), 1/(math.sqrt(data.modes['High res'][i])))
+                    elif i == 14:
+                        self.var = (1,100,.01)
                     else:
-                        #var=(1,10,.01)
-                        self.var = (1/(math.sqrt(data.modes['Med res'][i])), 1/(math.sqrt(data.modes['Low res'][i])), 1/(math.sqrt(data.modes['High res'][i])))
-                elif i == 14:
-                    self.var = (1,100,.01)
+                        #self.var = (1/(math.sqrt(data.modes['Med res'][i])), 1/(math.sqrt(data.modes['Low res'][i])), 1/(math.sqrt(data.modes['High res'][i])))
+                        self.var = (1,10,.01)
                 else:
-                    #self.var = (1/(math.sqrt(data.modes['Med res'][i])), 1/(math.sqrt(data.modes['Low res'][i])), 1/(math.sqrt(data.modes['High res'][i])))
-                    self.var = (1,10,.01)
+                    self.var = set_var[i]
             else:
                 self.var = (1,10,.01)
             print(self.var)
@@ -49,98 +53,123 @@ class gpy_single_k_emu:
 
         return
 
-    def plot(self):
+    def plot(self, plot_file='pdf'):
+        w,h=fi.figaspect(.3)
+        fig, (ax1, ax2) = pb.subplots(1, 2, figsize=(w,h), dpi=1200)
         if self.data.test_models in range(50):
-            pb.plot(self.data.k_test[:3], self.data.Y_test[:3], color='b', linestyle='dashed', label='Extended data')
-            pb.plot(self.data.k_test[:3], self.y[:3], color='r', linestyle='dashed')
-            pb.plot(self.data.k_test[2:], self.data.Y_test[2:], color='b', label=('True Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
-            pb.plot(self.data.k_test[2:], self.y[2:], color='r', label=('Predicted Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
+            ax1.plot(self.data.k_test[:3], self.data.Y_test[:3], color='b', linestyle='dashed', label='Padded data')
+            ax1.plot(self.data.k_test[:3], self.y[:3], color='r', linestyle='dashed')
+            ax1.plot(self.data.k_test[2:], self.data.Y_test[2:], color='b', label=('True P(k) for model_' + f"{self.data.test_models:03d}"))
+            ax1.plot(self.data.k_test[2:], self.y[2:], color='r', label=('Predicted P(k) for model_' + f"{self.data.test_models:03d}"))
             
-            pb.title('GPy test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('P(k) (Mpc^3)')
-            pb.xscale('log')
-            pb.yscale('log')
-            pb.legend()
-            pb.savefig('./Plots/gpy_single_k_med.pdf', dpi=800)
-            pb.clf()
+            #fig.suptitle('GPy test (kernel = RBF)')
+            ax1.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax1.set_ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
+            ax1.set_xscale('log')
+            ax1.set_yscale('log')
+            ax1.legend()
+            #pb.savefig('./Plots/gpy_single_k_med.pdf', dpi=800)
+            #pb.clf()
         
-            pb.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-            pb.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-            pb.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-            pb.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-            pb.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-            pb.plot(self.data.k_test[:2], self.error[:2], alpha=0)
-            pb.plot(self.data.k_test[2:], self.error[2:], label=('Residual error for model_' + f"{self.data.test_models:03d}"))
-            pb.title('GPy error test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('Residual error')
-            pb.xscale('log')
-            pb.legend()
-            pb.xlim(right=10)
-            pb.savefig('./Plots/gpy_single_k_error_med.pdf', dpi=800)
+            ax2.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
+            ax2.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+            ax2.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
+            ax2.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+            ax2.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
+            ax2.plot(self.data.k_test[:3], self.error[:3], linestyle='dashed') #alpha=0.5)
+            ax2.plot(self.data.k_test[2:], self.error[2:], color='tab:blue', label=('model_' + f"{self.data.test_models:03d}" + ' error'))
+            #pb.title('GPy error test (kernel = RBF)')
+            ax2.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax2.set_ylabel('Residual error', fontsize=15)
+            ax2.set_xscale('log')
+            ax2.legend()
+            ax2.set_xlim(right=10)
+            if max(self.error) > 1.2 and min(self.error) < 0.8:
+                ax2.set_ylim(top=1.2, bottom=0.8)
+            elif min(self.error) < 0.8:
+                ax2.set_ylim(bottom=0.8)
+            elif max(self.error) > 1.2:
+                ax2.set_ylim(top=1.2)
+            fig.subplots_adjust(wspace=0.15)
+            pb.savefig(f'./Plots/gpy_single_k_med.{plot_file}')
             pb.clf()
         
         elif self.data.test_models in range(50, 100):
-            pb.plot(self.data.k_test[:2], self.data.Y_test[:2], color='b', linestyle='dashed', label='Padded data')
-            pb.plot(self.data.k_test[:2], self.y[:2], color='r', linestyle='dashed')
-            pb.plot(self.data.k_test[-2:], self.data.Y_test[-2:], color='b', linestyle='dashed')
-            pb.plot(self.data.k_test[-2:], self.y[-2:], color='r', linestyle='dashed')
-            pb.plot(self.data.k_test[1:-1], self.data.Y_test[1:-1], color='b', label=('True Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
-            pb.plot(self.data.k_test[1:-1], self.y[1:-1], color='r', label=('Predicted Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
-            pb.title('GPy test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('P(k) (Mpc^3)')
-            pb.xscale('log')
-            pb.yscale('log')
-            pb.legend()
-            pb.savefig('./Plots/gpy_single_k_low.pdf', dpi=800)
-            pb.clf()
+            ax1.plot(self.data.k_test[:2], self.data.Y_test[:2], color='b', linestyle='dashed', label='Padded data')
+            ax1.plot(self.data.k_test[:2], self.y[:2], color='r', linestyle='dashed')
+            ax1.plot(self.data.k_test[-2:], self.data.Y_test[-2:], color='b', linestyle='dashed')
+            ax1.plot(self.data.k_test[-2:], self.y[-2:], color='r', linestyle='dashed')
+            ax1.plot(self.data.k_test[1:-1], self.data.Y_test[1:-1], color='b', label=('True P(k) for model_' + f"{self.data.test_models:03d}"))
+            ax1.plot(self.data.k_test[1:-1], self.y[1:-1], color='r', label=('Predicted P(k) for model_' + f"{self.data.test_models:03d}"))
+            #fig.suptitle('GPy test (kernel = RBF)')
+            ax1.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax1.set_ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
+            ax1.set_xscale('log')
+            ax1.set_yscale('log')
+            ax1.legend()
+            #pb.savefig('./Plots/gpy_single_k_low.pdf', dpi=800)
+            #pb.clf()
         
-            pb.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-            pb.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-            pb.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-            pb.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-            pb.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-            pb.plot(self.data.k_test[0], self.error[0], alpha=0)
-            pb.plot(self.data.k_test[1:-1], self.error[1:-1], label=('Residual error for model_' + f"{self.data.test_models:03d}"))
-            pb.title('GPy error test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('Residual error')
-            pb.xscale('log')
-            pb.legend()
-            pb.xlim(right=10)
-            pb.savefig('./Plots/gpy_single_k_error_low.pdf', dpi=800)
+            ax2.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
+            ax2.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+            ax2.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
+            ax2.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+            ax2.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
+            ax2.plot(self.data.k_test[:2], self.error[:2], linestyle='dashed') #alpha=0.5)
+            ax2.plot(self.data.k_test[1:-1], self.error[1:-1], color='tab:blue', label=('model_' + f"{self.data.test_models:03d}" + ' error'))
+            ax2.plot(self.data.k_test[-2:], self.error[-2:], linestyle='dashed', color='tab:blue')
+            #pb.title('GPy error test (kernel = RBF)')
+            ax2.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax2.set_ylabel('Residual error', fontsize=15)
+            ax2.set_xscale('log')
+            ax2.legend()
+            ax2.set_xlim(right=10)
+            if max(self.error) > 1.2 and min(self.error) < 0.8:
+                ax2.set_ylim(top=1.2, bottom=0.8)
+            elif min(self.error) < 0.8:
+                ax2.set_ylim(bottom=0.8)
+            elif max(self.error) > 1.2:
+                ax2.set_ylim(top=1.2)
+            fig.subplots_adjust(wspace=0.15)
+            pb.savefig(f'./Plots/gpy_single_k_low.{plot_file}')
             pb.clf()
                 
         elif self.data.test_models in range(100,150):
-            pb.plot(self.data.k_test[:4], self.data.Y_test[:4], color='b', linestyle='dashed', label='Padded data')
-            pb.plot(self.data.k_test[:4], self.y[:4], color='r', linestyle='dashed')
-            pb.plot(self.data.k_test[3:], self.data.Y_test[3:], color='b', label=('True Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
-            pb.plot(self.data.k_test[3:], self.y[3:], color='r', label=('Predicted Non-linear P(k) for model_' + f"{self.data.test_models:03d}"))
-            pb.title('GPy test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('P(k) (Mpc^3)')
-            pb.xscale('log')
-            pb.yscale('log')
-            pb.legend()
-            pb.savefig('./Plots/gpy_single_k_high.pdf', dpi=800)
-            pb.clf()
+            ax1.plot(self.data.k_test[:4], self.data.Y_test[:4], color='b', linestyle='dashed', label='Padded data')
+            ax1.plot(self.data.k_test[:4], self.y[:4], color='r', linestyle='dashed')
+            ax1.plot(self.data.k_test[3:], self.data.Y_test[3:], color='b', label=('True P(k) for model_' + f"{self.data.test_models:03d}"))
+            ax1.plot(self.data.k_test[3:], self.y[3:], color='r', label=('Predicted P(k) for model_' + f"{self.data.test_models:03d}"))
+            #fig.suptitle('GPy test (kernel = RBF)')
+            ax1.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax1.set_ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
+            ax1.set_xscale('log')
+            ax1.set_yscale('log')
+            ax1.legend()
+            #pb.savefig('./Plots/gpy_single_k_high.pdf', dpi=800)
+            #pb.clf()
                 
-            pb.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-            pb.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-            pb.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-            pb.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-            pb.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-            pb.plot(self.data.k_test[:3], self.error[:3], alpha=0)
-            pb.plot(self.data.k_test[3:], self.error[3:], label=('Residual error for model_' + f"{self.data.test_models:03d}"))
-            pb.title('GPy error test (kernel = RBF)')
-            pb.xlabel('k (1/Mpc)')
-            pb.ylabel('Residual error')
-            pb.xscale('log')
-            pb.legend()
-            pb.xlim(right=10)
-            pb.savefig('./Plots/gpy_single_k_error_high.pdf', dpi=800)
+            ax2.hlines(y=1.000, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
+            ax2.hlines(y=0.990, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+            ax2.hlines(y=1.010, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
+            ax2.hlines(y=0.950, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+            ax2.hlines(y=1.050, xmin=-1, xmax=max(self.data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
+            ax2.plot(self.data.k_test[:4], self.error[:4], linestyle='dashed') #alpha=0.5)
+            ax2.plot(self.data.k_test[3:], self.error[3:], color='tab:blue', label=('model_' + f"{self.data.test_models:03d}" + ' error'))
+            #pb.title('GPy error test (kernel = RBF)')
+            ax2.set_xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+            ax2.set_ylabel('Residual error', fontsize=15)
+            ax2.set_xscale('log')
+            ax2.legend()
+            ax2.set_xlim(right=10)
+            if max(self.error) > 1.2 and min(self.error) < 0.8:
+                ax2.set_ylim(top=1.2, bottom=0.8)
+            elif min(self.error) < 0.8:
+                ax2.set_ylim(bottom=0.8)
+            elif max(self.error) > 1.2:
+                ax2.set_ylim(top=1.2)
+            fig.subplots_adjust(wspace=0.15)
+            pb.tight_layout()
+            pb.savefig(f'./Plots/gpy_single_k_high.{plot_file}')
             pb.clf()
             
         return
@@ -179,18 +208,18 @@ def ext_comparison(p, plot=True):
     elif n in range(100, 150):
         k=3
     boost = BXL_DMO_Pk(n, 100, pk='nbk-rebin-std', lin='rebin')
+    print(boost.Y_train[49])
     boost_pad = BXL_DMO_Pk(n, 100, pk='nbk-rebin-std', lin='rebin', pad=True)
-    b0 = gpy_HR_emulator(boost, ['Low'], [len(boost.k_test)-1], test=((len(boost.k_test)-1) if n in range(50,100) else False)).data
+    b0 = gpy_HR_emulator(boost, ['Low'], [len(boost.k_test)-1], test=((len(boost.k_test)-1) if n in range(100) else False)).data
     #b2 = gpy_LR_emulator(b1, 'Low', 1, PT=True).data
     #b3 = gpy_LR_emulator(b2, 'Med', 2).data
     boost_ext = gpy_LR_emulator(b0, ['Med', 'Low', 'High'], [2, 1, 3], test=k).data
+    print(boost_ext.Y_train[49])
+    pad = gpy_single_k_emu(boost_pad)
+    emu = gpy_single_k_emu(boost_ext)
+
+    emu.plot(plot_file='png')
         
-    pad = gpy_single_k_emu(n, boost_pad)
-    emu = gpy_single_k_emu(n, boost_ext)
-
-    emu.plot()
-    
-
     if plot == True:
     
         fig, (ax1,ax2) = pb.subplots(1, 2, sharey=True, tight_layout=True, gridspec_kw={'wspace': 0})
@@ -261,7 +290,19 @@ def ext_comparison(p, plot=True):
 
 if __name__ == '__main__':
 
-    models =[]
+    #test_model = 29
+    #boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin-std', lin='rebin')
+    #b0 = gpy_HR_emulator(boost, ['Low'], [len(boost.k_test)-1], test=((len(boost.k_test)-1) if test_model in range(50,100) else False)).data
+    #boost_ext = gpy_LR_emulator(b0, ['Med', 'Low', 'High'], [2, 1, 3], test=2).data
+
+    
+    #v = [()]
+    #emu = gpy_single_k_emu(boost_ext)
+    #emu.plot()
+    
+    #quit()
+
+    models =[(29,29),(68,68),(142,142)]
     boost = BXL_DMO_Pk(0, 100, pk='nbk-rebin-std', lin='rebin')
     res = 'All'
     if res == 'Med':
@@ -280,11 +321,12 @@ if __name__ == '__main__':
     runs = int((q[1]-q[0]+1)*.2)
     pad_err = np.zeros((runs,15))
     emu_err = np.zeros((runs,15))
-    for r in range(runs):
-        pad, emu, n = ext_comparison(q, plot=False)
+    for r in range(len(models)):
+        print(models[r])
+        pad, emu, n = ext_comparison(models[r], plot=False)
         pad_err[r, :] = pad.error
         emu_err[r, :] = emu.error
-        models.append(n)
+        #models.append(n)
     print(models)
     pad_avg = np.mean(pad_err, axis=0)
     emu_avg = np.mean(emu_err, axis=0)

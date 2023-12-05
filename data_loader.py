@@ -15,6 +15,7 @@ class BXL_DMO_Pk:
         self.pk = pk
         self.extrap = extrap
         self.pad = pad
+        self.lin = lin
         
         #The parameters file
         self.parameters = np.loadtxt('./BXL_data/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
@@ -31,7 +32,7 @@ class BXL_DMO_Pk:
             self.X_test = self.parameters_norm[self.test_models, :]
             self.X_train = np.delete(self.parameters_norm, self.test_models, axis=0)
         
-        if pk == 'swift':
+        if pk == 'powmes':
             array_size = 435
         elif pk == 'nbk':
             array_size = 1023
@@ -61,12 +62,12 @@ class BXL_DMO_Pk:
             self.high_k_cut = cutoff[1]
             self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
 
-        if lin == 'camb':
+        if self.lin == 'camb':
             self.k_camb_linear = np.logspace(-3, np.log10(50), 300)
-            self.P_k_camb_linear = np.loadtxt('/home/arijconl/BAHAMAS_XL/pk_lin_camb2022_slhs_nested_3x50_kmax_50_running_w0_m1p2_m0p6_wa_m1p6_p0p5.txt', skiprows=index, max_rows=1)
-        elif lin == 'class':
+            self.P_k_camb_linear = np.loadtxt('./BXL_data/pk_lin_camb2022_slhs_nested_3x50_kmax_50_running_w0_m1p2_m0p6_wa_m1p6_p0p5.txt', skiprows=index, max_rows=1)
+        elif self.lin == 'class':
             self.P_k_class_linear = np.zeros((150, 400, 2))
-        elif lin == 'rebin':
+        elif self.lin == 'rebin':
             pass
     
         #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
@@ -80,7 +81,7 @@ class BXL_DMO_Pk:
             elif i in np.arange(100, 150):
                 boxsize = 350
 
-            if pk == 'swift':
+            if pk == 'powmes':
                 self.k[i, :] = np.loadtxt('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 1)
 
                 self.P_k[i, :] = np.loadtxt('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" + '_N1260_L' + f"{boxsize}" + '_DMO/power_spectra/power_matter_0122.txt', skiprows = 20, usecols = 2)
@@ -115,14 +116,14 @@ class BXL_DMO_Pk:
             else:
                 self.P_k_interp[i, :] = h(self.k_test)
         
-            if lin == 'camb':
+            if self.lin == 'camb':
                 k_linear = k_linear*(self.parameters[i, 2])
                 P_k_linear = P_k_linear/(self.parameters[i, 2]**3)
                 
                 f = interpolate.interp1d(k_linear, P_k_linear, kind='cubic')
                 y = f(self.k_test)
 
-            elif lin == 'class':
+            elif self.lin == 'class':
                 self.P_k_class_linear[i, :, :] = np.loadtxt('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" +'_N1260_L' + f"{boxsize}" + '_DMO/class_linear_spectra_z_0.txt', skiprows=2, usecols=(0, 2))
 
                 f = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
@@ -185,10 +186,19 @@ class BXL_DMO_Pk:
 
             ###Plotting function broken for now###
             #if self.extrap == False:
-                #u=0
-                #for t in self.k[i+(q*50), :]:
-                    #if t <= max(self.P_k_class_linear[i+(q*50), :, 0]):
-                        #u+=1
+            #print(max(self.P_k_class_linear[i, :, 0]), max(self.P_k_class_linear[i+50, :, 0]), max(self.P_k_class_linear[i+100, :, 0]))
+            u_0=0
+            u_50=0
+            u_100=0
+            for t in self.k[i, :]:
+                if t <= 30:
+                    u_0+=1
+            for t in self.k[i+50, :]:
+                if t <= 30:
+                    u_50+=1
+            for t in self.k[i+100, :]:
+                if t <= 30:
+                    u_100+=1
                         #k_plot = self.k[i, :u]
                 #e = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
                 #p = e(k_plot)
@@ -197,20 +207,42 @@ class BXL_DMO_Pk:
                 #u=self.bins
 
             plt.figure(1)
-            plt.plot(self.k[i, :], self.P_k[i, :], color='tab:blue', label=('Models 000-049' if i==0 else None))
-            plt.plot(self.k[i+50, :], self.P_k[i+50, :], color='tab:orange', label=('Models 050-099' if i==0 else None))
-            plt.plot(self.k[i+100, :], self.P_k[i+100, :], color='tab:green', label=('Models 100-149' if i==0 else None))
+            if self.lin != 'class':
+                plt.plot(self.k[i, :], self.P_k[i, :], color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(self.k[i+50, :], self.P_k[i+50, :], color='tab:orange', label=('Models 050-099' if i==0 else None))
+                plt.plot(self.k[i+100, :], self.P_k[i+100, :], color='tab:green', label=('Models 100-149' if i==0 else None))
+            else:
+                l_0 = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
+                l_50 = interpolate.interp1d(self.P_k_class_linear[i+50, :, 0], self.P_k_class_linear[i+50, :, 1], kind='cubic')
+                l_100 = interpolate.interp1d(self.P_k_class_linear[i+100, :, 0], self.P_k_class_linear[i+100, :, 1], kind='cubic')
+                lin_0 = l_0(self.k[i, :u_0])
+                lin_50 = l_50(self.k[i+50, :u_50])
+                lin_100 = l_100(self.k[i+100, :u_100])
+                plt.plot(self.k[i, :], self.P_k[i, :]/lin_0, color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(self.k[i+50, :], self.P_k[i+50, :]/lin_50, color='tab:orange', label=('Models 050-099' if i==0 else None))
+                plt.plot(self.k[i+100, :], self.P_k[i+100, :]/lin_100, color='tab:green', label=('Models 100-149' if i==0 else None))
 
             plt.figure(2)
             k_fund_low = (2*np.pi)/1400
-            plt.plot(self.k[i, :]/(k_fund_low*2), self.P_k[i, :], color='tab:blue', label=('Models 000-049' if i==0 else None))
-            plt.plot(self.k[i+50, :]/k_fund_low, self.P_k[i+50, :], color='tab:orange', label=('Models 050-099' if i==0 else None))
-            plt.plot(self.k[i+100, :]/(k_fund_low*4), self.P_k[i+100, :], color='tab:green', label=('Models 100-149' if i==0 else None))
+            if self.lin != 'class':
+                plt.plot(self.k[i, :]/(k_fund_low*2), self.P_k[i, :], color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(self.k[i+50, :]/k_fund_low, self.P_k[i+50, :], color='tab:orange', label=('Models 050-099' if i==0 else None))
+                plt.plot(self.k[i+100, :]/(k_fund_low*4), self.P_k[i+100, :], color='tab:green', label=('Models 100-149' if i==0 else None))
+            else:
+                l_0 = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
+                l_50 = interpolate.interp1d(self.P_k_class_linear[i+50, :, 0], self.P_k_class_linear[i+50, :, 1], kind='cubic')
+                l_100 = interpolate.interp1d(self.P_k_class_linear[i+100, :, 0], self.P_k_class_linear[i+100, :, 1],kind='cubic')
+                lin_0 = l_0(self.k[i, :u_0])
+                lin_50 = l_50(self.k[i+50, :u_50])
+                lin_100 = l_100(self.k[i+100, :u_100])
+                plt.plot(self.k[i, :]/(k_fund_low*2), self.P_k[i, :]/lin_0, color='tab:blue', label=('Models 000-049' if i==0 else None))
+                plt.plot(self.k[i+50, :]/k_fund_low, self.P_k[i+50, :]/lin_50, color='tab:orange', label=('Models 050-099' if i==0 else None))
+                plt.plot(self.k[i+100, :]/(k_fund_low*4), self.P_k[i+100, :]/lin_100, color='tab:green', label=('Models 100-149' if i==0 else None))
 
         plt.figure(1)
-        plt.title('Boost function vs k for all models', fontsize=10, wrap=True)
-        plt.xlabel('k (1/Mpc)')
-        plt.ylabel('P(k) (Mpc^3)')
+        plt.title(r'Boost function vs $k$ for all models', fontsize=10, wrap=True)
+        plt.xlabel(r'$k \: [1/Mpc]$')
+        plt.ylabel(r'$P(k) \: [Mpc^3]$')
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
@@ -218,9 +250,9 @@ class BXL_DMO_Pk:
         plt.clf()
         
         plt.figure(2)
-        plt.title('Boost function vs k/k_fundamental for all models', fontsize=10, wrap=True)
-        plt.xlabel('k (1/Mpc)')
-        plt.ylabel('P(k) (Mpc^3)')
+        plt.title(r'Boost function vs $k$/$k_{fundamental}$ for all models', fontsize=10, wrap=True)
+        plt.xlabel(r'$k \: [1/Mpc]$')
+        plt.ylabel(r'$P(k) \: [Mpc^3]$')
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
@@ -228,9 +260,9 @@ class BXL_DMO_Pk:
         plt.clf()
         
         plt.figure(3)
-        plt.title('P(k) vs test_k for all models', fontsize=10, wrap=True)
-        plt.xlabel('k (1/Mpc)')
-        plt.ylabel('P(k) (Mpc^3)')
+        plt.title(r'$P(k)$ vs test_k for all models', fontsize=10, wrap=True)
+        plt.xlabel(r'$k \: [1/Mpc]$')
+        plt.ylabel(r'$P(k) \: [Mpc^3]$')
         plt.xscale('log')
         plt.yscale('log')
         plt.legend()
@@ -272,20 +304,20 @@ class FLAMINGO_DMO_Pk:
 
         array_size = 504
 
-        self.k = np.zeros([5, array_size])
-        self.P_k = np.zeros([5, array_size])
-        self.P_k_interp = np.zeros([5, self.bins])
-        self.P_k_nonlinear = np.zeros([5, self.bins])
+        self.k = np.zeros([8, array_size])
+        self.P_k = np.zeros([8, array_size])
+        self.P_k_interp = np.zeros([8, self.bins])
+        self.P_k_nonlinear = np.zeros([8, self.bins])
 
         self.low_k_cut = cutoff[0]
         self.high_k_cut = cutoff[1]
         if self.low_k_cut == self.high_k_cut:
             self.k_test = BXL_data.k_test
-            self.P_k_interp = np.zeros([5, len(self.k_test)])
-            self.P_k_nonlinear = np.zeros([5, len(self.k_test)])
+            self.P_k_interp = np.zeros([8, len(self.k_test)])
+            self.P_k_nonlinear = np.zeros([8, len(self.k_test)])
         else:
             self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
-            self.P_k_boost = np.zeros([5, len(BXL_data.k_test)])
+            self.P_k_boost = np.zeros([8, len(BXL_data.k_test)])
 
         if lin == 'camb':
             self.k_camb_linear = np.loadtxt('./BXL_data/FLAMINGO_camb_pk.txt', usecols=0)
@@ -296,7 +328,7 @@ class FLAMINGO_DMO_Pk:
             pass
         
         #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
-        for i in range(5):
+        for i in range(8):
             
             #print('model = ' + str(i))
             if i == 0:
@@ -314,14 +346,23 @@ class FLAMINGO_DMO_Pk:
             elif i == 4:
                 boxsize = 1000
                 n = 1800
+            elif i == 5:
+                boxsize = 400
+                n = 720
+            elif i == 6:
+                boxsize = 200
+                n = 720
+            elif i == 7:
+                boxsize = 1000
+                n = 900
 
-            self.k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize}" + 'N' + f"{n}" + '_DMO_z0.txt', skiprows = 16, usecols = 1)
+            self.k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 1)
             if self.low_k_cut == -1:
                 self.k_test = self.k[i, :]
-                self.P_k_interp = np.zeros([5, len(self.k_test)])
-                self.P_k_nonlinear = np.zeros([5, len(self.k_test)])
+                self.P_k_interp = np.zeros([8, len(self.k_test)])
+                self.P_k_nonlinear = np.zeros([8, len(self.k_test)])
                 
-            self.P_k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize}" + 'N' + f"{n}" + '_DMO_z0.txt', skiprows = 16, usecols = 2)
+            self.P_k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 2)
 
             
             if add_pade == False:
@@ -364,7 +405,7 @@ class FLAMINGO_DMO_Pk:
                 self.P_k_nonlinear[i, :] = self.P_k_interp[i, :]
                     
             if pad == True:
-                for f in range(5):
+                for f in range(8):
                     pade_func((3, 8, 13), self.k_test, self.P_k_nonlinear[f, :], (2, 15, 15), self.k_test, self.P_k_nonlinear[f, :])
                     pade_func((2, 7, 12), self.k_test, self.P_k_nonlinear[f+50, :], (1, 14, 15), self.k_test, self.P_k_nonlinear[f+50, :])
                     pade_func((4, 8, 13), self.k_test, self.P_k_nonlinear[f+100, :], (3, 15, 15), self.k_test, self.P_k_nonlinear[f+100, :])
@@ -375,6 +416,10 @@ class FLAMINGO_DMO_Pk:
                     self.P_k_boost[i, h] = 1
                 else:
                     self.P_k_boost[i, h] = v(BXL_data.k_test[h])
+
+            for a,b in enumerate(self.P_k_boost[i, :]):
+                if b < 0:
+                    self.P_k_boost[i, a] = 1
             
         #print(self.P_k_nonlinear[50, :])
         self.k_test = BXL_data.k_test
@@ -397,7 +442,7 @@ if __name__ == "__main__":
     #test_model = 11
     
     nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin-std', lin = 'rebin', holdout=False)
-    flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
+    #flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
     print(nbk_boost.k)
     print(nbk_boost.P_k)
     print(nbk_boost.k_test)
@@ -408,33 +453,48 @@ if __name__ == "__main__":
     #print(nbk_boost.Y_test)
     nbk_boost.plot_k()
 
+    quit()
     print(flamingo.X_test)
     print(flamingo.Y_test)
 
+    print(flamingo.k[6, :])
+    print(flamingo.P_k[6, :])
+    print(flamingo.P_k_interp[6, :])
+    print(flamingo.P_k_nonlinear[6, :])
+    print(flamingo.P_k_boost[6, :])
+    
     plt.plot(flamingo.k_test, flamingo.Y_test[0, :], label='1Gpc (High res)')
     plt.plot(flamingo.k_test, flamingo.Y_test[1, :], label='2.8Gpc')
     plt.plot(flamingo.k_test, flamingo.Y_test[2, :], label='5.6Gpc')
     plt.plot(flamingo.k_test, flamingo.Y_test[3, :], label='11.2Gpc')
     plt.plot(flamingo.k_test, flamingo.Y_test[4, :], label='1Gpc (Intermediate res)')
+    plt.plot(flamingo.k_test, flamingo.Y_test[5, :], label='400Mpc (Intermediate res)')
+    plt.plot(flamingo.k_test, flamingo.Y_test[6, :], label='200Mpc (High res)')
+    plt.plot(flamingo.k_test, flamingo.Y_test[7, :], label='1Gpc (Low res)')
     plt.xscale('log')
     plt.yscale('log')
-    plt.title('Boost function vs k for FLAMINGO models', fontsize=10, wrap=True)
-    plt.xlabel('k (1/Mpc)')
-    plt.ylabel('P(k) (Mpc^3)')
+    plt.title(r'Boost function vs $k$ for FLAMINGO models', fontsize=10, wrap=True)
+    plt.xlabel(r'$k \: [1/Mpc]$')
+    plt.ylabel(r'$P(k) \: [Mpc^3]$')
     plt.legend()
     plt.savefig('./Plots/flam.pdf', dpi=800)
     plt.clf()
+
+    print('done')
 
     plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[0, :]), label='1Gpc (High res)')
     plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[1, :]), label='2.8Gpc')
     plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[2, :]), label='5.6Gpc')
     plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[3, :]), label='11.2Gpc')
     plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[4, :]), label='1Gpc (Intermediate res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[5, :]), label='400Mpc (Intermediate res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[6, :]), label='200Mpc (High res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[3, :]/flamingo.Y_test[7, :]), label='1Gpc (Low res)')
     plt.xscale('log')
     #plt.yscale('log')
     plt.title('FLAMINGO models relative to the lowest resolution run (11.2Gpc)', fontsize=10, wrap=True)
-    plt.xlabel('k (1/Mpc)')
-    plt.ylabel('P_11.2(k)/P_i(k)')
+    plt.xlabel(r'$k \: [1/Mpc]$')
+    plt.ylabel(r'$P_{11.2}(k)/P_{i}(k)$')
     plt.legend()
     plt.savefig('./Plots/flam_comp.pdf', dpi=800)
     plt.clf()
@@ -444,11 +504,24 @@ if __name__ == "__main__":
     plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[2, :]), label='5.6Gpc')
     #plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[3, :]), label='11.2Gpc')
     plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[4, :]), label='1Gpc (Intermediate res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[5, :]), label='400Mpc (Intermediate res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[6, :]), label='200Mpc (High res)')
+    plt.plot(flamingo.k_test, (flamingo.Y_test[4, :]/flamingo.Y_test[7, :]), label='1Gpc (Low res)')
     plt.xscale('log')
     #plt.yscale('log')
     plt.title('FLAMINGO models relative to the fiducial run (1Gpc med res)', fontsize=10, wrap=True)
-    plt.xlabel('k (1/Mpc)')
-    plt.ylabel('P_fiducial(k)/P_i(k)')
+    plt.xlabel(r'$k \: [1/Mpc]$')
+    plt.ylabel(r'$P_{fiducial}(k)/P_{i}(k)$')
     plt.legend()
     plt.savefig('./Plots/flam_comp_2.pdf', dpi=800)
+    plt.clf()
+
+    plt.plot(nbk_boost.k_test, nbk_boost.Y_test)
+    plt.xscale('log')
+    #plt.yscale('log')
+    plt.title('FLAMINGO models relative to the fiducial run (1Gpc med res)', fontsize=10, wrap=True)
+    plt.xlabel(r'$k \: [1/Mpc]$')
+    plt.ylabel(r'$P_{fiducial}(k)/P_{i}(k)$')
+    plt.legend()
+    plt.savefig('./Plots/test.pdf', dpi=800)
     plt.clf()
