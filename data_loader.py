@@ -5,11 +5,13 @@ import random
 import pandas as pd
 from pade import pade
 from pade_func import pade_func
+import pdb
+import glob
 
 
 class BXL_DMO_Pk:
 
-    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'nbk-rebin', lin = 'class', boost = True, extrap = False, add_pade = False, pad = False, holdout = True):
+    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'nbk-rebin', lin = 'class', boost = True, extrap = False, add_pade = False, pad = False, holdout = True, sigma8=False):
         self.test_models = test_models
         self.bins = bins
         self.pk = pk
@@ -19,7 +21,10 @@ class BXL_DMO_Pk:
         
         #The parameters file
         self.parameters = np.loadtxt('./BXL_data/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
-
+        if sigma8 == True:
+            sig8 = np.loadtxt('./BXL_data/slhs_nested_3x_Om_fb_h_ns_sigma8_w0_wa_Omnuh2_alphas_fgasfb.txt', max_rows=150, usecols=4)
+            self.parameters[:, 4] = sig8
+            
         #Normalize the design to be between 0,1
         self.design_max = np.max(self.parameters, 0)
         self.design_min = np.min(self.parameters, 0)
@@ -32,20 +37,25 @@ class BXL_DMO_Pk:
             self.X_test = self.parameters_norm[self.test_models, :]
             self.X_train = np.delete(self.parameters_norm, self.test_models, axis=0)
         
-        if pk == 'powmes':
-            array_size = 435
-        elif pk == 'nbk':
-            array_size = 1023
-        elif pk == 'nbk-rebin':
+        if pk == 'nbk-rebin':
             df = pd.read_csv("./BXL_data/boost_rebinned_21.csv")
-            array_size = 19
         elif pk == 'nbk-rebin-std':
             df = pd.read_csv("./BXL_data/boost_rebinned_standardized.csv")
             self.modes = {}
             self.modes['Med res'] = list(df['N_modes'][:15].values)
             self.modes['Low res'] = list(df['N_modes'][(15*50):(15*51)].values)
             self.modes['High res'] = list(df['N_modes'][(15*100):(15*101)].values)
-            array_size = 15
+
+        a = random.randint(0, 149)
+        print(a)
+        b = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{a:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = (2,3))
+        for x in range(len(b)):
+            if b[x,0] < b[x,1]:
+                array_size = x-1
+                break
+
+        print(array_size)
+        print(b[array_size,0], b[array_size,1])
 
         if pk == 'nbk-rebin-std':
             self.bins = array_size
@@ -302,10 +312,12 @@ class FLAMINGO_DMO_Pk:
         self.design_min = BXL_data.design_min
         self.parameters_norm = (self.parameters-self.design_min)/(self.design_max-self.design_min)
 
-        array_size = 504
+        #array_size = 504
 
-        self.k = np.zeros([8, array_size])
-        self.P_k = np.zeros([8, array_size])
+        #self.k = np.zeros([8, array_size])
+        #self.P_k = np.zeros([8, array_size])
+        self.k = []
+        self.P_k = []
         self.P_k_interp = np.zeros([8, self.bins])
         self.P_k_nonlinear = np.zeros([8, self.bins])
 
@@ -356,24 +368,27 @@ class FLAMINGO_DMO_Pk:
                 boxsize = 1000
                 n = 900
 
-            self.k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 1)
+            #self.k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 1)
+            k = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 1)
+            self.k.append(k)
             if self.low_k_cut == -1:
                 self.k_test = self.k[i, :]
                 self.P_k_interp = np.zeros([8, len(self.k_test)])
                 self.P_k_nonlinear = np.zeros([8, len(self.k_test)])
                 
-            self.P_k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 2)
-
+            #self.P_k[i, :] = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 2)
+            P_k = np.loadtxt('./BXL_data/power_matter_L' + f"{boxsize:04d}" + 'N' + f"{n:04d}" + '_DMO_z0.txt', skiprows = 16, usecols = 2)
+            self.P_k.append(P_k)
             
             if add_pade == False:
-                h = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic', fill_value="extrapolate" if extrap == True else 'nan')
+                h = interpolate.interp1d(k, P_k, kind='cubic', fill_value="extrapolate" if extrap == True else 'nan')
             elif add_pade == True:
-                print(self.k[i, -4:-1], self.P_k[i, -4:-1])
-                h = pade.fit(self.k[i, -4:-1], self.P_k[i, -4:-1])
+                print(k[-4:-1], P_k[-4:-1])
+                h = pade.fit(k[-4:-1], P_k[-4:-1])
                 print(self.k_test[-4:-1], h(self.k_test))
 
             for u,g in enumerate(self.k_test):
-                if g < min(self.k[i, :]):
+                if g < min(k):
                     self.P_k_interp[i, u] = -1
                 else:
                     self.P_k_interp[i, u] = h(self.k_test[u])
@@ -442,7 +457,7 @@ if __name__ == "__main__":
     #test_model = 11
     
     nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin-std', lin = 'rebin', holdout=False)
-    #flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
+    flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
     print(nbk_boost.k)
     print(nbk_boost.P_k)
     print(nbk_boost.k_test)
@@ -453,12 +468,11 @@ if __name__ == "__main__":
     #print(nbk_boost.Y_test)
     nbk_boost.plot_k()
 
-    quit()
     print(flamingo.X_test)
     print(flamingo.Y_test)
 
-    print(flamingo.k[6, :])
-    print(flamingo.P_k[6, :])
+    print(flamingo.k[6])
+    print(flamingo.P_k[6])
     print(flamingo.P_k_interp[6, :])
     print(flamingo.P_k_nonlinear[6, :])
     print(flamingo.P_k_boost[6, :])

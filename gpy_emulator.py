@@ -1,7 +1,8 @@
+import pandas as pd
 import numpy as np
 import GPy
 import pylab as pb
-from data_loader import BXL_DMO_Pk
+from data_loader import BXL_DMO_Pk, FLAMINGO_DMO_Pk
 import random
 import pickle
 import matplotlib.figure as fi
@@ -18,12 +19,15 @@ class gpy_emulator:
     def __init__(self, P_k_data, kern, var_fix=False, single_k='nan', var=(1,10,.1), save=False, upload=False):
         self.test_models = P_k_data.test_models
         self.kern = kern
-        self.error = np.zeros((len(P_k_data.Y_test), 1))
+        if single_k == 'nan':
+            print(P_k_data.Y_test.shape)
+            self.error = np.zeros((P_k_data.Y_test.shape[0], P_k_data.Y_test.shape[1]))
+        else:
+            self.error = np.zeros((len(P_k_data.Y_test), 1))
 
         if upload == True:
             self.model = pickle.load(open("gpy_model.pkl", "rb"))
         else:
-            print(np.reshape(P_k_data.Y_train[47:50, single_k], (3,1)))
             self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, (np.reshape(P_k_data.Y_train[:, single_k], (len(P_k_data.Y_train),1)) if isinstance(single_k, int) else P_k_data.Y_train), self.kern)
             #self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, np.reshape(P_k_data.Y_train[:, single_k], (149,1)), self.kern)
             if var_fix == True:
@@ -39,6 +43,17 @@ class gpy_emulator:
                 self.model.het_Gauss.variance[:index1] = var[0]
                 self.model.het_Gauss.variance[index1:index2] = var[1]
                 self.model.het_Gauss.variance[index2:] = var[2]
+                #if single_k == 'nan':
+                    #self.kern.bias_variance[:index1] = bias_weight[0]
+                    #self.kern.bias_variance[index1:index2] = bias_weight[1]
+                    #self.kern.bias_variance[index2:] = bias_weight[2]
+                #else:
+                    #self.kern.bias_variance[:index1] = bias_weight[0][i]
+                    #self.kern.bias_variance[index1:index2] = bias_weight[1][i]
+                    #self.kern.bias_variance[index2:] = bias_weight[2][i]
+                #self.kern.weight_variance[:index1] = var[0]
+                #self.kern.weight_variance[index1:index2] = var[1]
+                #self.kern.weight_variance[index2:] = var[2]
                 #self.model.het_Gauss.variance[49:99].fix()
             elif var_fix == False:
                 pass
@@ -98,16 +113,77 @@ class gpy_emulator:
 
 if __name__ == "__main__":
     #test_model = random.randint(0, 149)
-    test_model = random.randint(0, 149)
+    b = pd.read_csv('./BXL_data/weights.csv')
+    test_model = random.randint(100, 149)
     print('Model = ' + str(test_model))
-    nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin-std', lin='rebin', pad=True)
+    nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin-std', lin='rebin', pad=True, holdout=True)
+    flam = FLAMINGO_DMO_Pk(nbk_boost, 100, cutoff=(.01, 10), lin='camb')
     #nbk_boost.plot_k()
     print(nbk_boost.modes)
-    gpy_rbf = gpy_emulator(nbk_boost, RBF)
-    gpy_ard = gpy_emulator(nbk_boost, ARD)
-    gpy_rbf_fix = gpy_emulator(nbk_boost, RBF, var_fix = True)
-    gpy_ard_fix = gpy_emulator(nbk_boost, ARD, var_fix = True)
-    #gpy_bias = gpy_emulator(nbk_boost, Bias)
+    #gpy_rbf = gpy_emulator(nbk_boost, RBF)
+    #gpy_ard = gpy_emulator(nbk_boost, ARD*Bias, var_fix = True)
+    #gpy_ard = gpy_emulator(flam, ARD*Bias, var_fix = True)
+    #gpy_rbf_fix = gpy_emulator(nbk_boost, RBF, var_fix = True)
+    pred = []
+    err = []
+    for i in range(len(flam.k_test)):
+        HR_Bias = GPy.kern.Bias(9)
+        IR_Bias = GPy.kern.Bias(9)
+        LR_Bias = GPy.kern.Bias(9)
+        HR_Bias.bias_variance = b['HR'][i]
+        IR_Bias.bias_variance = b['IR'][i]
+        LR_Bias.bias_variance = b['LR'][i]
+
+        weights = np.linspace(.01, 10, len(flam.k_test))
+        IR_weights = np.linspace(.7, 10, 7)
+
+        #if i == 7:
+            #gpy_ard_fix = gpy_emulator(flam, ARD*(HR_Bias+IR_Bias+LR_Bias), var_fix = True, single_k=i, var=(.01, weights[len(flam.k_test)-i-1], weights[i]))
+        #elif i<7:
+            #gpy_ard_fix = gpy_emulator(flam, ARD*(HR_Bias+IR_Bias+LR_Bias), var_fix = True, single_k=i, var=(IR_weights[6-i], weights[i], weights[len(flam.k_test)-i-1]))
+        #else:
+            #gpy_ard_fix = gpy_emulator(flam, ARD*(HR_Bias+IR_Bias+LR_Bias), var_fix = True, single_k=i, var=(IR_weights[i-8], weights[i], weights[len(flam.k_test)-i-1]))
+        #pred.append(gpy_ard_fix.y[0])
+        #err.append(gpy_ard_fix.error[0])
+    gpy_ard_fix = gpy_emulator(nbk_boost, ARD*Bias, var_fix = True)
+    w,h=fi.figaspect(.3)
+    fig, (ax1, ax2) = pb.subplots(1, 2, figsize=(w,h))
+    #ax1.plot(flam.k_test, flam.Y_test[0], color='b', label=('True P(k) for model_' + f"{test_model:03d}"))
+    #ax1.plot(flam.k_test, gpy_ard.y[0], color='r', label=('Predicted P(k) for model_' + f"{test_model:03d}"))
+    ax1.plot(nbk_boost.k_test, nbk_boost.Y_test, color='b', label=('True P(k) for model_' + f"{test_model:03d}"))
+    ax1.plot(nbk_boost.k_test, gpy_ard_fix.y, color='r', label=('Predicted P(k) for model_' + f"{test_model:03d}"))
+    
+    fig.suptitle('HR model')
+    ax1.set_xlabel('k (1/Mpc)')
+    ax1.set_ylabel('P(k) (Mpc^3)')
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
+    ax1.legend()
+    ax1.set_xlim(right=10)
+    
+    
+    ax2.hlines(y=1.000, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
+    ax2.hlines(y=0.990, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+    ax2.hlines(y=1.010, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
+    ax2.hlines(y=0.950, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+    ax2.hlines(y=1.050, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
+    #ax2.plot(nbk_boost.k_test, gpy_ard.error[0], label=('model_' + f"{test_model:03d}" + ' error'))
+    ax2.plot(nbk_boost.k_test, gpy_ard.error, label=('model_' + f"{test_model:03d}" + ' error'))
+    ax2.set_xlabel('k (1/Mpc)')
+    ax2.set_ylabel('Residual error')
+    ax2.set_xscale('log')
+    ax2.legend()
+    ax2.set_xlim(right=10)
+    if max(gpy_ard.error) > 1.2 and min(gpy_ard.error) < 0.8:
+        ax2.set_ylim(top=1.2, bottom=0.8)
+    elif min(gpy_ard.error) < 0.8:
+        ax2.set_ylim(bottom=0.8)
+    elif max(gpy_ard.error) > 1.2:
+        ax2.set_ylim(top=1.2)
+    fig.subplots_adjust(wspace=0.15)
+    pb.savefig(f'./Plots/gpy_test_error_ardxbias_HR.png', dpi=1200)
+    pb.clf()
+                #gpy_bias = gpy_emulator(nbk_boost, Bias)
     #gpy_poly = gpy_emulator(nbk_boost, polynomial)
     #gpy_lin = gpy_emulator(nbk_boost, linear)
     #gpy_mlp = gpy_emulator(nbk_boost, mlp)
@@ -122,13 +198,13 @@ if __name__ == "__main__":
     #gpy_rbf_poly_m = gpy_emulator(nbk_boost, RBF*polynomial)
     #gpy_rbf_lin_m = gpy_emulator(nbk_boost, RBF*linear)
     
-    print(gpy_rbf.model.kern)
-    print(gpy_rbf.error)
-    gpy_rbf.plot(nbk_boost, 'RBF')
+    #print(gpy_rbf.model.kern)
+    #print(gpy_rbf.error)
+    #gpy_rbf.plot(nbk_boost, 'RBF')
     print(gpy_ard.model.kern)
     print(gpy_ard.error)
     gpy_ard.plot(nbk_boost, 'RBF(ARD)', 'png')
-    gpy_rbf_fix.plot(nbk_boost, 'RBF fixed var')
+    #gpy_rbf_fix.plot(nbk_boost, 'RBF fixed var')
     gpy_ard_fix.plot(nbk_boost, 'RBF(ARD) fixed var')
     #gpy_bias.plot(nbk_boost, 'Bias')
     #gpy_poly.plot(nbk_boost, 'Polynomial')
