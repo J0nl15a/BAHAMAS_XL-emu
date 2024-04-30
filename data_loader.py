@@ -5,25 +5,34 @@ import random
 import pandas as pd
 from pade import pade
 from pade_func import pade_func
+from hypercube import hypercube_plot
+from gpy_emu_extension import gpy_HR_emulator
 import pdb
 import glob
 
 
 class BXL_DMO_Pk:
 
-    def __init__(self, test_models, bins, cutoff = (0.025, 2.45), cosmo = np.arange(9), pk = 'nbk-rebin', lin = 'class', boost = True, extrap = False, add_pade = False, pad = False, holdout = True, sigma8=False):
+    def __init__(self, test_models, bins, cutoff = (-1, 10), cosmo = np.arange(9), pk = 'nbk-rebin', lin = 'class', boost = True, extrap = False, add_pade = False, pad = False, holdout = True, sigma8=False, plot_hypercube=False):
         self.test_models = test_models
         self.bins = bins
         self.pk = pk
-        self.extrap = extrap
         self.pad = pad
         self.lin = lin
+        self.modes = {}
+        self.low_k_cut = cutoff[0]
+        self.high_k_cut = cutoff[1]
         
         #The parameters file
         self.parameters = np.loadtxt('./BXL_data/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=cosmo)
         if sigma8 == True:
             sig8 = np.loadtxt('./BXL_data/slhs_nested_3x_Om_fb_h_ns_sigma8_w0_wa_Omnuh2_alphas_fgasfb.txt', max_rows=150, usecols=4)
             self.parameters[:, 4] = sig8
+
+        if plot_hypercube == True:
+            labels = {r'$\Omega_m$':[.20,.25,.30,.35], r'$f_b$':[.14,.15,.16,.17], r'$h_0$':[.64,.7,.76], r'$n_s$':[.95,.97,.99], r'$\sigma_8$':[0.72,0.80,0.88], r'$w_0$':[-.7,-.9,-1.1], r'$w_a$':[.2,-.5,-1.2], r'$\Omega_{\nu}h^2$':[.005,.003,.001], r'$\alpha_s$':[.025,0,-.025]}
+            
+            hypercube = hypercube_plot(data=[self.parameters[:50, :], self.parameters[50:100, :], self.parameters[100:, :]], parameter_labels=labels, save_to='./Plots/BXL_hypercube.png', title='BAHAMAS XL Latin hypercube design')
             
         #Normalize the design to be between 0,1
         self.design_max = np.max(self.parameters, 0)
@@ -40,7 +49,7 @@ class BXL_DMO_Pk:
         def extract_series(group):
             return {'k': group['k'].values, 'Pk': group['boost'].values, 'model': group['model'].iloc[0], 'modes': group['N_modes'].values if pk == 'nbk-rebin-std' else None}
 
-        if pk == 'nbk-rebin' or 'nbk-rebin-std':
+        if pk == 'nbk-rebin' or pk == 'nbk-rebin-std':
             if pk == 'nbk-rebin':
                 df = pd.read_csv("./BXL_data/boost_rebinned_21.csv")
             elif pk == 'nbk-rebin-std':
@@ -49,99 +58,149 @@ class BXL_DMO_Pk:
             grouped = df.groupby('model')
             arrays_per_model = grouped.apply(extract_series)
             array_size = len(arrays_per_model[0]['k'])
+            self.bins = array_size
 
             if pk == 'nbk-rebin-std':
-                self.modes = {}
                 self.modes['Med res'] = arrays_per_model[0]['modes'].tolist()
                 self.modes['Low res'] = arrays_per_model[50]['modes'].tolist()
                 self.modes['High res'] = arrays_per_model[100]['modes'].tolist()
 
         else:
-            a = random.randint(0, 149)
-            print(a)
-            b = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{a:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = (2,3))
-            for x in range(len(b)):
-                if b[x,0] < b[x,1]:
-                    array_size = x-1
-                    break
+            random_int = random.randint(0, 149)
+            if pk == 'nbk':
+                random_model = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{random_int:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols = (0,1), delimiter=' ')
+                array_size = len(random_model)
+            else:
+                random_model = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{random_int:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = (1,2,3))
+                for x in range(len(random_model)):
+                    if random_model[x,1] < random_model[x,2]:
+                        array_size = x-1
+                        break
+
+        if pk == 'nbk-rebin-std':
+            self.k_test = arrays_per_model[0]['k']
+        else:
+            if pk == 'nbk-rebin':
+                minimum_k = min(arrays_per_model[100]['k'])
+                maximum_k = max(arrays_per_model[50]['k'])
+            elif pk == 'nbk':
+                minimum_k = min(random_model[0] if random_int in range(100, 150) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' '))
+                maximum_k = max(random_model[0] if random_int in range(50, 100) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' '))
+            elif pk == 'powmes':
+                minimum_k = min(random_model[0] if random_int in range(100, 150) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
+                maximum_k = max(random_model[0] if random_int in range(50, 100) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
+
+            if self.low_k_cut == -1:
+                self.low_k_cut = minimum_k
+
+            try:
+                print(self.low_k_cut, minimum_k)
+                self.low_k_cut >= minimum_k
+            except ValueError:
+                print('self.low_k_cut > minimum_k == False')
+                self.low_k_cut = minimum_k
+
+            try:
+                print(self.high_k_cut, maximum_k)
+                self.high_k_cut <= maximum_k
+            except ValueError:
+                print('self.high_k_cut < maximum_k == False')
+                self.high_k_cut = maximum_k
+                
+            self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
+            quit()
+            
+        if self.lin == 'camb':
+            self.k_camb_linear = np.tile(np.logspace(-3, np.log10(50), 300), (150,1))
+            self.P_k_camb_linear = np.loadtxt('./BXL_data/pk_lin_camb2022_slhs_nested_3x50_kmax_50_running_w0_m1p2_m0p6_wa_m1p6_p0p5.txt')
+        elif self.lin == 'class':
+            class_directory = glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_*_N1260_L*_DMO/class_linear_spectra_z_0.txt')
+            for index, directory in enumerate(class_directory):
+                if index == 0:
+                    linear_spectra = np.loadtxt(directory, skiprows=2, usecols=(0,2))
+                    k_lin_size = P_k_lin_size = len(linear_spectra)
+                    self.k_class_linear = np.zeros([150, k_lin_size])
+                    self.P_k_class_linear = np.zeros([150, P_k_lin_size])
+                self.k_class_linear[index, :] = np.loadtxt(directory, skiprows=2, usecols=0)
+                self.P_k_class_linear[index, :] = np.loadtxt(directory, skiprows=2, usecols=2)
+        elif self.lin == 'rebin':
+            pass
+
+        #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
 
         self.k = np.zeros([150, array_size])
         self.P_k = np.zeros([150, array_size])
-        self.P_k_interp = np.zeros([150, self.bins])
-        self.P_k_nonlinear = np.zeros([150, self.bins])
-
-        if pk == 'nbk-rebin-std':
-            self.k_test = np.array(df['k'][:15])
-        else:
-            self.low_k_cut = cutoff[0]
-            self.high_k_cut = cutoff[1]
-            self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
-
-        if self.lin == 'camb':
-            self.k_camb_linear = np.logspace(-3, np.log10(50), 300)
-            self.P_k_camb_linear = np.loadtxt('./BXL_data/pk_lin_camb2022_slhs_nested_3x50_kmax_50_running_w0_m1p2_m0p6_wa_m1p6_p0p5.txt', skiprows=index, max_rows=1)
-        elif self.lin == 'class':
-            self.P_k_class_linear = np.zeros((150, 400, 2))
-        elif self.lin == 'rebin':
-            pass
-    
-        #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
-                    
+        self.P_k_interp = np.zeros([150, len(self.k_test)])
+        self.P_k_nonlinear = np.zeros([150, len(self.k_test)])
+                                
         if pk == 'powmes':
             training_directory = glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_*_N1260_L*_DMO/power_spectra/power_matter_0122.txt')
-                
-            self.k = np.loadtxt(training_directory, skiprows = 20, usecols = 1)
-            self.P_k = np.loadtxt(training_directory, skiprows = 20, usecols = 2)
+
+            for index, directory in enumerate(training_directory):
+                self.k[index, :] = np.loadtxt(directory, skiprows = 20, usecols = 1)[:array_size]
+                self.P_k[index, :] = np.loadtxt(directory, skiprows = 20, usecols = 2)[:array_size]
 
         elif pk == 'nbk':
             training_directory = glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_*_N1260_L*_DMO/PS/PS_k_078.csv')
-            
-            self.k = np.loadtxt(training_directory, skiprows = 1, usecols = 0)*(self.parameters[:, 2])
-            self.P_k = np.loadtxt(training_directory, skiprows = 1, usecols = 1)/(self.parameters[:, 2]**3)
+
+            for index, directory in enumerate(training_directory):
+                self.k[index, :] = np.loadtxt(directory, skiprows = 1, usecols = 0, delimiter=' ')*(self.parameters[index, 2])
+                self.P_k[index, :] = np.loadtxt(directory, skiprows = 1, usecols = 1, delimiter=' ')/(self.parameters[index, 2]**3)
+                self.modes[index] = np.loadtxt(directory, skiprows = 1, usecols = 2, delimiter=' ')
 
         elif pk == 'nbk-rebin' or 'nbk-rebin-std':
             for model in arrays_per_model:
                 self.k[model['model'], :] = model['k']
                 self.P_k[model['model'], :] = model['Pk']
-                                    
-        if extrap == False:
-            pass
-        else:
-            self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(10), self.bins)
 
-        if add_pade == False:
-            h = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic', fill_value="extrapolate" if extrap == True else 'nan')
-        elif add_pade == True:
-            print(self.k[i, -4:-1], self.P_k[i, -4:-1])
-            h = pade.fit(self.k[i, -4:-1], self.P_k[i, -4:-1])
-            print(self.k_test[-4:-1], h(self.k_test))
+        print(self.k.shape)
+        print(self.P_k.shape)
+        print(self.P_k)
+                
+        #if extrap == True:
+            #self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(10), self.bins)
 
         if pk == 'nbk-rebin-std':
-            self.P_k_interp[i, :] = self.P_k[i, :]
+            self.P_k_interp = self.P_k
         else:
-            self.P_k_interp[i, :] = h(self.k_test)
-            
-        if self.lin == 'camb':
-            k_linear = k_linear*(self.parameters[i, 2])
-            P_k_linear = P_k_linear/(self.parameters[i, 2]**3)
+            interpolation_function = {}
+            for i in range(len(self.k)):
+                if add_pade == False:
+                    interpolation_function[i] = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic', fill_value="nan")
+                elif add_pade == True:
+                    print(self.k[i, -4:-1], self.P_k[i, -4:-1])
+                    interpolation_function[i] = pade.fit(self.k[i, -4:-1], self.P_k[i, -4:-1])
+                    #print(self.k_test[-4:-1], h(self.k_test))
                 
-            f = interpolate.interp1d(k_linear, P_k_linear, kind='cubic')
-            y = f(self.k_test)
+                self.P_k_interp[i, :] = interpolation_function[i](self.k_test)
 
+        linear_interpolation_function = {}
+        if self.lin == 'camb':
+            k_linear = self.k_camb_linear*np.reshape(self.parameters[:, 2], (150,1))
+            P_k_linear = self.P_k_camb_linear/(np.reshape(self.parameters[:, 2], (150,1))**3)
         elif self.lin == 'class':
-            self.P_k_class_linear[i, :, :] = np.loadtxt('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{i:03d}" +'_N1260_L' + f"{boxsize}" + '_DMO/class_linear_spectra_z_0.txt', skiprows=2, usecols=(0, 2))
+            k_linear = self.k_class_linear
+            P_k_linear = self.P_k_class_linear
 
-            f = interpolate.interp1d(self.P_k_class_linear[i, :, 0], self.P_k_class_linear[i, :, 1], kind='cubic')
-            y = f(self.k_test)
+        if self.lin == 'rebin':
+            self.P_k_linear_interp = np.ones([150, self.P_k_interp.shape[1]])
+        else:
+            self.P_k_linear_interp = np.zeros([150, self.P_k_interp.shape[1]])
+            for l in range(len(k_linear)):
+                linear_interpolation_function[l] = interpolate.interp1d(k_linear[l], P_k_linear[l], kind='cubic')
+                self.P_k_linear_interp[l, :] = linear_interpolation_function[l](self.k_test)
 
         if pk == 'nbk-rebin' or pk == 'nbk-rebin-std':
-            self.P_k_nonlinear[i, :] = self.P_k_interp[i, :]
+            self.P_k_nonlinear = self.P_k_interp
         else:
             if boost == True:
-                self.P_k_nonlinear[i, :] = self.P_k_interp[i, :] / y
+                self.P_k_nonlinear = self.P_k_interp / self.P_k_linear_interp
             elif boost == False:
-                self.P_k_nonlinear[i, :] = self.P_k_interp[i, :]
+                self.P_k_nonlinear = self.P_k_interp
 
+        print(self.P_k_nonlinear)
+        #quit()
+        
         if pad == True:
             for f in range(50):
                 #q = interpolate.interp1d(self.k_test[1:-1], self.P_k_nonlinear[50:100, 1:-1], kind='cubic', fill_value="extrapolate")
@@ -170,16 +229,20 @@ class BXL_DMO_Pk:
                 #y = q(self.k_test[:3])
                 #self.P_k_nonlinear[100:, :3] = [10**s for s in y]
 
-        #print(self.P_k_nonlinear[50, :])
+        try:
+            logged_array = np.log10(self.P_k_nonlinear)
+        except ValueError:
+            nan_mask = np.isnan(self.P_k_nonlinear)
+            self.P_k_nonlinear[nan_mask] = 0
+            #extended_data = gpy_HR_emulator(nbk_boost, ['Low'], [len(nbk_boost.k_test)-1], test=len(nbk_boost.k_test)-1, consist=True).data
+            
         if holdout == False:
             self.Y_train = np.log10(self.P_k_nonlinear)
         else:
             self.Y_test = self.P_k_nonlinear[self.test_models, :]
-            self.P_k_nonlinear_train = np.delete(self.P_k_nonlinear, self.test_models, axis=0)
-        
-            #Log of non-linear boost
-            self.Y_train = np.log10(self.P_k_nonlinear_train)
-            
+            self.Y_train = np.log10(np.delete(self.P_k_nonlinear, self.test_models, axis=0))
+
+        print(self.Y_train)
 
     def plot_k(self):
 
@@ -451,7 +514,8 @@ if __name__ == "__main__":
     #test_models = 50
     #test_model = 11
     
-    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin-std', lin = 'rebin', holdout=False)
+    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin', lin = 'class', holdout=False)
+    quit()
     flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
     print(nbk_boost.k)
     print(nbk_boost.P_k)

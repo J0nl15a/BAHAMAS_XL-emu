@@ -1,9 +1,6 @@
 import numpy as np
-from data_loader import BXL_DMO_Pk
 import GPy
-import random
 import pylab as pb
-from gpy_emulator import gpy_emulator
 
 class gpy_HR_emulator:
 
@@ -178,6 +175,10 @@ class gpy_MR_step_emulator:
                                 
                                 
 if __name__ == "__main__":
+    from data_loader import BXL_DMO_Pk
+    import random
+    from gpy_emulator import gpy_emulator
+    
     n = random.randint(50,99)
     m = random.randint(100,149)
     nbk_boost = BXL_DMO_Pk(n, 100, pk='nbk-rebin-std', lin='rebin')
