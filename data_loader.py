@@ -67,8 +67,10 @@ class BXL_DMO_Pk:
 
         else:
             random_int = random.randint(0, 149)
+            print(random_int)
             if pk == 'nbk':
-                random_model = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{random_int:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols = (0,1), delimiter=' ')
+                random_model = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{random_int:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols = 0, delimiter=' ')*self.parameters[random_int, 2]
+                print(random_model)
                 array_size = len(random_model)
             else:
                 random_model = np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{random_int:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = (1,2,3))
@@ -84,31 +86,31 @@ class BXL_DMO_Pk:
                 minimum_k = min(arrays_per_model[100]['k'])
                 maximum_k = max(arrays_per_model[50]['k'])
             elif pk == 'nbk':
-                minimum_k = min(random_model[0] if random_int in range(100, 150) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' '))
-                maximum_k = max(random_model[0] if random_int in range(50, 100) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' '))
+                minimum_k = min(random_model if random_int in range(100, 150) else (np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' ')*self.parameters[100, 2]))*1.01
+                maximum_k = max(random_model if random_int in range(50, 100) else (np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/PS/PS_k_078.csv')[0], skiprows = 1, usecols= 0, delimiter=' ')*self.parameters[50, 2]))*0.99
             elif pk == 'powmes':
-                minimum_k = min(random_model[0] if random_int in range(100, 150) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
-                maximum_k = max(random_model[0] if random_int in range(50, 100) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
+                minimum_k = min(random_model[:, 0] if random_int in range(100, 150) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{100:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
+                maximum_k = max(random_model[:, 0] if random_int in range(50, 100) else np.loadtxt(glob.glob('/mnt/data1/users/arijsalc/BAHAMAS_XL/DMO/model_' + f"{50:03d}" + '_N1260_L*_DMO/power_spectra/power_matter_0122.txt')[0], skiprows = 20, usecols = 1))
 
             if self.low_k_cut == -1:
                 self.low_k_cut = minimum_k
 
             try:
                 print(self.low_k_cut, minimum_k)
-                self.low_k_cut >= minimum_k
-            except ValueError:
+                assert self.low_k_cut >= minimum_k
+            except AssertionError:
                 print('self.low_k_cut > minimum_k == False')
                 self.low_k_cut = minimum_k
 
             try:
                 print(self.high_k_cut, maximum_k)
-                self.high_k_cut <= maximum_k
-            except ValueError:
+                assert self.high_k_cut <= maximum_k
+            except AssertionError:
                 print('self.high_k_cut < maximum_k == False')
                 self.high_k_cut = maximum_k
-                
+
+            print(self.low_k_cut, self.high_k_cut)
             self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(self.high_k_cut), self.bins)
-            quit()
             
         if self.lin == 'camb':
             self.k_camb_linear = np.tile(np.logspace(-3, np.log10(50), 300), (150,1))
@@ -160,13 +162,14 @@ class BXL_DMO_Pk:
         #if extrap == True:
             #self.k_test = np.logspace(np.log10(self.low_k_cut), np.log10(10), self.bins)
 
+        print(self.k_test)
         if pk == 'nbk-rebin-std':
             self.P_k_interp = self.P_k
         else:
             interpolation_function = {}
             for i in range(len(self.k)):
                 if add_pade == False:
-                    interpolation_function[i] = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic', fill_value="nan")
+                    interpolation_function[i] = interpolate.interp1d(self.k[i, :], self.P_k[i, :], kind='cubic')
                 elif add_pade == True:
                     print(self.k[i, -4:-1], self.P_k[i, -4:-1])
                     interpolation_function[i] = pade.fit(self.k[i, -4:-1], self.P_k[i, -4:-1])
@@ -199,35 +202,34 @@ class BXL_DMO_Pk:
                 self.P_k_nonlinear = self.P_k_interp
 
         print(self.P_k_nonlinear)
-        #quit()
         
-        if pad == True:
-            for f in range(50):
-                #q = interpolate.interp1d(self.k_test[1:-1], self.P_k_nonlinear[50:100, 1:-1], kind='cubic', fill_value="extrapolate")
-                #q = pade.fit(self.k_test[3:5], np.log10(self.P_k_nonlinear[f, 3:5]))
-                pade_func((3, 8, 13), self.k_test, self.P_k_nonlinear[f, :], (2, 15, 15), self.k_test, self.P_k_nonlinear[f, :])
-                #self.P_k_nonlinear[f, :] = [10**s for s in self.P_k_nonlinear[f, :]]
-                #y = q(self.k_test[:2])
-                #self.P_k_nonlinear[:50, :2] = [10**s for s in y]
-                #q = pade.fit(self.k_test[2:4], np.log10(self.P_k_nonlinear[f+50, 2:4]))
-                pade_func((2, 7, 12), self.k_test, self.P_k_nonlinear[f+50, :], (1, 14, 15), self.k_test, self.P_k_nonlinear[f+50, :])
-                #self.P_k_nonlinear[f+50, :] = [10**s for s in self.P_k_nonlinear[f+50, :]]
-                #self.P_k_nonlinear[50:100, 0] = 10**(q(self.k_test[0]))
-                #self.P_k_nonlinear[50:100, -1] = 10**(q(self.k_test[-1]))
-                #y = q(self.k_test[:3])
-                #self.P_k_nonlinear[100:, :3] = [10**s for s in y]
-                #q = pade.fit(self.k_test[-4:-2], np.log10(self.P_k_nonlinear[f+50, -4:-2]))
-                pade_func((4, 8, 13), self.k_test, self.P_k_nonlinear[f+100, :], (3, 15, 15), self.k_test, self.P_k_nonlinear[f+100, :])
-                #self.P_k_nonlinear[f+100, :] = [10**s for s in self.P_k_nonlinear[f+100, :]]
-                #self.P_k_nonlinear[50:100, -1] = 10**(q(self.k_test[-1]))
-                #q = interpolate.interp1d(self.k_test[2:], self.P_k_nonlinear[:50, 2:], kind='cubic', fill_value="extrapolate")
-                #y = q(self.k_test[:2])
-                #self.P_k_nonlinear[:50, :2] = [10**s for s in y]
-                #q = interpolate.interp1d(self.k_test[3:], self.P_k_nonlinear[100:, 3:], kind='cubic', fill_value="extrapolate")
-                #q = pade.fit(self.k_test[4:6], self.P_k_nonlinear[f+100, 4:6])
-                #self.P_k_nonlinear[50:100, -1] = 10**q(self.k_test[-1])
-                #y = q(self.k_test[:3])
-                #self.P_k_nonlinear[100:, :3] = [10**s for s in y]
+        #if pad == True:
+        #    for f in range(50):
+        #        #q = interpolate.interp1d(self.k_test[1:-1], self.P_k_nonlinear[50:100, 1:-1], kind='cubic', fill_value="extrapolate")
+        #        #q = pade.fit(self.k_test[3:5], np.log10(self.P_k_nonlinear[f, 3:5]))
+        #        pade_func((3, 8, 13), self.k_test, self.P_k_nonlinear[f, :], (2, 15, 15), self.k_test, self.P_k_nonlinear[f, :])
+        #        #self.P_k_nonlinear[f, :] = [10**s for s in self.P_k_nonlinear[f, :]]
+        #        #y = q(self.k_test[:2])
+        #        #self.P_k_nonlinear[:50, :2] = [10**s for s in y]
+        #        #q = pade.fit(self.k_test[2:4], np.log10(self.P_k_nonlinear[f+50, 2:4]))
+        #        pade_func((2, 7, 12), self.k_test, self.P_k_nonlinear[f+50, :], (1, 14, 15), self.k_test, self.P_k_nonlinear[f+50, :])
+        #        #self.P_k_nonlinear[f+50, :] = [10**s for s in self.P_k_nonlinear[f+50, :]]
+        #        #self.P_k_nonlinear[50:100, 0] = 10**(q(self.k_test[0]))
+        #        #self.P_k_nonlinear[50:100, -1] = 10**(q(self.k_test[-1]))
+        #        #y = q(self.k_test[:3])
+        #        #self.P_k_nonlinear[100:, :3] = [10**s for s in y]
+        #        #q = pade.fit(self.k_test[-4:-2], np.log10(self.P_k_nonlinear[f+50, -4:-2]))
+        #        pade_func((4, 8, 13), self.k_test, self.P_k_nonlinear[f+100, :], (3, 15, 15), self.k_test, self.P_k_nonlinear[f+100, :])
+        #        #self.P_k_nonlinear[f+100, :] = [10**s for s in self.P_k_nonlinear[f+100, :]]
+        #        #self.P_k_nonlinear[50:100, -1] = 10**(q(self.k_test[-1]))
+        #        #q = interpolate.interp1d(self.k_test[2:], self.P_k_nonlinear[:50, 2:], kind='cubic', fill_value="extrapolate")
+        #        #y = q(self.k_test[:2])
+        #        #self.P_k_nonlinear[:50, :2] = [10**s for s in y]
+        #        #q = interpolate.interp1d(self.k_test[3:], self.P_k_nonlinear[100:, 3:], kind='cubic', fill_value="extrapolate")
+        #        #q = pade.fit(self.k_test[4:6], self.P_k_nonlinear[f+100, 4:6])
+        #        #self.P_k_nonlinear[50:100, -1] = 10**q(self.k_test[-1])
+        #        #y = q(self.k_test[:3])
+        #        #self.P_k_nonlinear[100:, :3] = [10**s for s in y]
 
         try:
             logged_array = np.log10(self.P_k_nonlinear)
@@ -242,7 +244,6 @@ class BXL_DMO_Pk:
             self.Y_test = self.P_k_nonlinear[self.test_models, :]
             self.Y_train = np.log10(np.delete(self.P_k_nonlinear, self.test_models, axis=0))
 
-        print(self.Y_train)
 
     def plot_k(self):
 
@@ -514,7 +515,7 @@ if __name__ == "__main__":
     #test_models = 50
     #test_model = 11
     
-    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'nbk-rebin', lin = 'class', holdout=False)
+    nbk_boost = BXL_DMO_Pk(test_models, bins, pk = 'powmes', lin = 'class', holdout=False)
     quit()
     flamingo = FLAMINGO_DMO_Pk(nbk_boost, bins, cutoff=(.01,10), lin='camb')
     print(nbk_boost.k)
