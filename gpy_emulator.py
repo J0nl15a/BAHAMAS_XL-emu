@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import GPy
 import pylab as pb
-from data_loader import BXL_DMO_Pk, FLAMINGO_DMO_Pk
+from data_loader import bahamasXLDMOData
+from flamingo_data_loader import flamingoDMOData
 import random
 import pickle
 import matplotlib.figure as fi
@@ -14,27 +15,31 @@ RBF = GPy.kern.RBF(9)
 Bias = GPy.kern.Bias(9)
 ARD = GPy.kern.RBF(9, ARD=True)
 
-class gpy_emulator:
+class gpyEmulator:
 
-    def __init__(self, P_k_data, kern, var_fix=False, single_k='nan', var=(1,10,.1), save=False, upload=False):
-        self.test_models = P_k_data.test_models
+    def __init__(self, data, kern=GPy.kern.RBF(9), var_fix=False, single_k='nan', var=(1,10,.1), save=False, upload=False, ARD=False):
+        
         self.kern = kern
-        if single_k == 'nan':
-            print(P_k_data.Y_test.shape)
-            self.error = np.zeros((P_k_data.Y_test.shape[0], P_k_data.Y_test.shape[1]))
-        else:
-            self.error = np.zeros((len(P_k_data.Y_test), 1))
+        if ARD == True:
+            self.kern = GPy.kern.RBF(9, ARD=True)
 
+        self.data = data
+
+        if single_k == 'nan':
+            self.error = np.zeros((len(self.data.Y_test), self.data.Y_test.shape[0]))
+        else:
+            self.error = np.zeros((len(self.data.Y_test), 1))
+            
+        print(self.data.X_train.shape, self.data.Y_train.shape)
         if upload == True:
             self.model = pickle.load(open("gpy_model.pkl", "rb"))
         else:
-            self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, (np.reshape(P_k_data.Y_train[:, single_k], (len(P_k_data.Y_train),1)) if isinstance(single_k, int) else P_k_data.Y_train), self.kern)
-            #self.model = GPy.models.GPHeteroscedasticRegression(P_k_data.X_train, np.reshape(P_k_data.Y_train[:, single_k], (149,1)), self.kern)
+            self.model = GPy.models.GPHeteroscedasticRegression(self.data.X_train, np.reshape(self.data.Y_train[:, single_k], (len(self.data.Y_train),1)) if isinstance(single_k, int) else self.data.Y_train, self.kern)
             if var_fix == True:
-                if self.test_models in range(50):
+                if self.data.test_models in range(50):
                     index1 = 49
                     index2 = 99
-                elif self.test_models in range(50, 100):
+                elif self.data.test_models in range(50, 100):
                     index1 = 50
                     index2 = 99
                 else:
@@ -58,47 +63,44 @@ class gpy_emulator:
             elif var_fix == False:
                 pass
             self.model.optimize()
-        self.y = 10**(self.model._raw_predict(P_k_data.X_test.reshape(1, -1))[0])
-        self.post_var = self.model._raw_predict(P_k_data.X_test.reshape(1, -1))[1][0]
+        self.y = 10**(self.model._raw_predict(self.data.X_test.reshape(1, -1))[0])
+        self.post_var = self.model._raw_predict(self.data.X_test.reshape(1, -1))[1][0]
         if save == True:
             pickle.dump(self.model, open("gpy_model.pkl", "wb"))
-        if P_k_data.Y_test.ndim > 1:
-            for w in range(len(P_k_data.Y_test)):
-                self.error[w, :] = self.y/(P_k_data.Y_test[w, single_k] if isinstance(single_k, int) else P_k_data.Y_test[w, :])
+        if self.data.Y_test.ndim > 1:
+            for w in range(len(self.data.Y_test)):
+                self.error[w, :] = self.y/(self.data.Y_test[w, single_k] if isinstance(single_k, int) else self.data.Y_test[w, :])
         else:
-            self.error = self.y/(P_k_data.Y_test[single_k] if isinstance(single_k, int) else P_k_data.Y_test)
+            self.error = self.y/(self.data.Y_test[single_k] if isinstance(single_k, int) else self.data.Y_test)
 
         return    
 
-    def plot(self, P_k_data, name, plot_file='pdf'):
+    def plot(self, name, plot_file='png'):
+
         w,h=fi.figaspect(.3)
         fig, (ax1, ax2) = pb.subplots(1, 2, figsize=(w,h))
-        ax1.plot(P_k_data.k_test, P_k_data.Y_test, color='b', label=('True P(k) for model_' + f"{self.test_models:03d}"))
-        ax1.plot(P_k_data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted P(k) for model_' + f"{self.test_models:03d}"))
-
-        fig.suptitle('GPy test (kernel = ' + f"{name}" + ')')
+        ax1.plot(self.data.k_test, self.data.Y_test, color='b', label=('True P(k) for model_' + f"{self.data.test_models:03d}"))
+        ax1.plot(self.data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted P(k) for model_' + f"{self.data.test_models:03d}"))
+        fig.suptitle('GPy test (kernel = '+f"{name}"+', '+("Intermediate" if self.data.test_models in range(50) else "Low" if self.data.test_models in range(50, 100) else "High")+' resolution)')
         ax1.set_xlabel('k (1/Mpc)')
         ax1.set_ylabel('P(k) (Mpc^3)')
         ax1.set_xscale('log')
         ax1.set_yscale('log')
         ax1.legend()
-        ax1.set_xlim(right=10)
-        #pb.savefig(f'./Plots/gpy_test_{name}.pdf', dpi=800)
-        #pb.clf()
-
+        ax1.set_xlim(right=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10)
+              
         
-        ax2.hlines(y=1.000, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-        ax2.hlines(y=0.990, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-        ax2.hlines(y=1.010, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-        ax2.hlines(y=0.950, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-        ax2.hlines(y=1.050, xmin=-1, xmax=max(P_k_data.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-        ax2.plot(P_k_data.k_test, self.error.reshape(-1,1), label=('model_' + f"{self.test_models:03d}" + ' error'))
-        #pb.title('GPy error test (kernel = ' + f"{name}" + ')')
+        ax2.hlines(y=1.000, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='solid', alpha=0.5, label=None)
+        ax2.hlines(y=0.990, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dashed', alpha=0.5, label='1% error')
+        ax2.hlines(y=1.010, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dashed', alpha=0.5, label=None)
+        ax2.hlines(y=0.950, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dotted', alpha=0.5, label='5% error')
+        ax2.hlines(y=1.050, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dotted', alpha=0.5, label=None)
+        ax2.plot(self.data.k_test, self.error.reshape(-1,1), label=('model_' + f"{self.data.test_models:03d}" + ' error'))
         ax2.set_xlabel('k (1/Mpc)')
         ax2.set_ylabel('Residual error')
         ax2.set_xscale('log')
         ax2.legend()
-        ax2.set_xlim(right=10)
+        ax2.set_xlim(right=(int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10))
         if max(self.error.reshape(-1,1)) > 1.2 and min(self.error.reshape(-1,1)) < 0.8:
             ax2.set_ylim(top=1.2, bottom=0.8)
         elif min(self.error.reshape(-1,1)) < 0.8:
@@ -112,6 +114,26 @@ class gpy_emulator:
         return
 
 if __name__ == "__main__":
+
+    test_model = random.randint(0, 149)
+    bxl = bahamasXLDMOData(pk='nbk-rebin-std', lin='rebin', holdout=test_model)
+    print(test_model)
+    print(bxl.Y_test)
+    bxl.extend_data(pad='emu')
+    print(bxl.Y_test)
+    
+    weights = pd.read_csv('./BXL_data/weights.csv')
+    emu = gpyEmulator(bxl, ARD=True)
+    print(bxl.Y_train)
+    print(emu.y)
+    print(emu.error)
+    emu.plot('ARD')
+    quit()
+
+
+
+
+
     #test_model = random.randint(0, 149)
     b = pd.read_csv('./BXL_data/weights.csv')
     test_model = random.randint(100, 149)

@@ -2,132 +2,85 @@ import numpy as np
 import GPy
 import pylab as pb
 
-class gpy_HR_emulator:
+class gpyHighResEmulator:
 
-    def __init__(self, P_k_data, res, k, kern=GPy.kern.RBF(9), test=False, consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(9), consist=False):
+
         self.data = P_k_data
 
-        for i, t in enumerate(res):
-            HR = 100
-        
-            if t == 'Low':
-                start = 50
-                end = 100
-            elif t == 'Med':
-                start = 0
-                end = 50
-            elif t == 'High':
-                start = 100
-                end = 150
+        HR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[100:, :], np.log10(self.data.P_k_nonlinear[100:, :]), kern)
+        HR_model.optimize()
+        y = 10**HR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
-            if test == False:
-                pass
-            else:
-                if self.data.test_models in range(100):
-                    HR -= 1
-                if self.data.test_models in range(start, end):
-                    end -= 1
-                elif self.data.test_models < start:
-                    start -= 1
-                    end -= 1
+        midpoint = int(len(self.data.k_test)/2)
+        self.data.P_k_nonlinear[:,midpoint:][self.data.nan_mask[:,midpoint:]] = y[:,midpoint:][self.data.nan_mask[:,midpoint:]]
 
-            HR_model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[HR:, :], self.data.Y_train[HR:, :], kern)
-            HR_model.optimize()
-            y = HR_model._raw_predict(self.data.X_train[start:end, :].reshape((end-start), -1))[0]
-            #print(y[:, k:])
-            
-            self.data.Y_train[start:end, k[i]:] = y[:, k[i]:]
-
-        if test == False:
-            pass
+        if isinstance(self.data.holdout, bool):
+            self.data.Y_train = np.log10(self.data.P_k_nonlinear)
         else:
-            z = HR_model._raw_predict(self.data.X_test.reshape(1, -1))[0][0]
-            if consist == True:
-                print('HR Consistency test')
-                print(self.data.Y_test)
-                print(10**z)
-                pb.plot(self.data.k_test, self.data.Y_test, label='Test data (Low res)')
-                pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='HR predicted test data')
-                pb.title('HR Consistency test')
-                pb.xscale('log')
-                pb.yscale('log')
-                pb.xlabel('k (1/Mpc)')
-                pb.xlabel('P(k) (Mpc^3)')
-                pb.legend()
-                pb.savefig('./Plots/emu_ext_test_HR.pdf', dpi=800)
-                pb.clf()
-            for j in range(test, 15):
-                self.data.Y_test[j] = 10**(z[j])
+            self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
+            self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
+
+        #    if consist == True:
+        #        print('HR Consistency test')
+        #        print(self.data.Y_test)
+        #        print(10**z)
+        #        pb.plot(self.data.k_test, self.data.Y_test, label='Test data (Low res)')
+        #        pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='HR predicted test data')
+        #        pb.title('HR Consistency test')
+        #        pb.xscale('log')
+        #        pb.yscale('log')
+        #        pb.xlabel('k (1/Mpc)')
+        #        pb.xlabel('P(k) (Mpc^3)')
+        #        pb.legend()
+        #        pb.savefig('./Plots/emu_ext_test_HR.pdf', dpi=800)
+        #        pb.clf()
         
         return
 
-class gpy_LR_emulator:
+class gpyLowResEmulator:
 
-    def __init__(self, P_k_data, res, k, kern=GPy.kern.RBF(9), test=False, consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(9), consist=False):
+
         self.data = P_k_data
 
-        for i, t in enumerate(res):
-            LR = [50, 100]
+        LR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[50:100, :], np.log10(self.data.P_k_nonlinear[50:100, :]), kern)
+        LR_model.optimize()
+        y = 10**LR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
-            if t == 'High':
-                start = 100
-                end = 150
-            elif t == 'Med':
-                start = 0
-                end = 50
-            elif t == 'Low':
-                start = 50
-                end = 100
-            
-            if test == False:
-                pass
-            else:
-                if self.data.test_models in range(50, 100):
-                    LR[1] -= 1
-                elif self.data.test_models in range(50):
-                    LR[0] -= 1
-                    LR[1] -= 1
-
-                if self.data.test_models in range(start, end):
-                    end -= 1
-                elif self.data.test_models < start:
-                    start -= 1
-                    end -= 1
-
-            LR_model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[LR[0]:LR[1], :], self.data.Y_train[LR[0]:LR[1], :], kern)
-            LR_model.optimize()
-            print(self.data.X_train[start:end, :].shape)
-            y = LR_model._raw_predict(self.data.X_train[start:end, :].reshape((end-start), -1))[0]
-            #print(y[:, :k])
+        midpoint = int(len(self.data.k_test)/2)
+        self.data.P_k_nonlinear[:,:midpoint][self.data.nan_mask[:,:midpoint]] = y[:,:midpoint][self.data.nan_mask[:,:midpoint]]
         
-            self.data.Y_train[start:end, :k[i]] = y[:, :k[i]]
-            self.data.Y_train[start:end, 0] = 0
-
-        if test == False:
-            pass
+        try:
+            assert True not in np.isnan(self.data.P_k_nonlinear[:,:midpoint])
+        except AssertionError:
+            mask = np.isnan(self.data.P_k_nonlinear[:,:midpoint])
+            self.data.P_k_nonlinear[:,:midpoint][mask] = 1
+            
+        if isinstance(self.data.holdout, bool):
+            self.data.Y_train = np.log10(self.data.P_k_nonlinear)
         else:
-            z = LR_model._raw_predict(self.data.X_test.reshape(1, -1))[0][0]
-            if consist == True:
-                print('LR Consistency test')
-                print(self.data.Y_test)
-                print(10**z)
-                pb.plot(self.data.k_test, self.data.Y_test, label='Test data (High res)')
-                pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='LR predicted test data')
-                pb.title('LR Consistency test')
-                pb.xscale('log')
-                pb.yscale('log')
-                pb.xlabel('k (1/Mpc)')
-                pb.xlabel('P(k) (Mpc^3)')
-                pb.legend()
-                pb.savefig('./Plots/emu_ext_test_LR.pdf', dpi=800)
-                pb.clf()
-            for j in range(test):
-                self.data.Y_test[j] = 10**(z[j])
-            self.data.Y_test[0] = 1
+            self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
+            self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
+
+        #    if consist == True:
+        #        print('LR Consistency test')
+        #        print(self.data.Y_test)
+        #        print(10**z)
+        #        pb.plot(self.data.k_test, self.data.Y_test, label='Test data (High res)')
+        #        pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='LR predicted test data')
+        #        pb.title('LR Consistency test')
+        #        pb.xscale('log')
+        #        pb.yscale('log')
+        #        pb.xlabel('k (1/Mpc)')
+        #        pb.xlabel('P(k) (Mpc^3)')
+        #        pb.legend()
+        #        pb.savefig('./Plots/emu_ext_test_LR.pdf', dpi=800)
+        #        pb.clf()
             
         return
 
-class gpy_MR_step_emulator:
+class gpyMedResStepEmulator:
 
     def __init__(self, P_k_data, HL=False, LH=False, pc=0.999, samp=50, step=20, mcmc=1000):
         self.test_models = P_k_data.test_models
