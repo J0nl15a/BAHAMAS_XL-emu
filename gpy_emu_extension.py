@@ -20,21 +20,6 @@ class gpyHighResEmulator:
         else:
             self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
             self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
-
-        #    if consist == True:
-        #        print('HR Consistency test')
-        #        print(self.data.Y_test)
-        #        print(10**z)
-        #        pb.plot(self.data.k_test, self.data.Y_test, label='Test data (Low res)')
-        #        pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='HR predicted test data')
-        #        pb.title('HR Consistency test')
-        #        pb.xscale('log')
-        #        pb.yscale('log')
-        #        pb.xlabel('k (1/Mpc)')
-        #        pb.xlabel('P(k) (Mpc^3)')
-        #        pb.legend()
-        #        pb.savefig('./Plots/emu_ext_test_HR.pdf', dpi=800)
-        #        pb.clf()
         
         return
 
@@ -62,21 +47,6 @@ class gpyLowResEmulator:
         else:
             self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
             self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
-
-        #    if consist == True:
-        #        print('LR Consistency test')
-        #        print(self.data.Y_test)
-        #        print(10**z)
-        #        pb.plot(self.data.k_test, self.data.Y_test, label='Test data (High res)')
-        #        pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='LR predicted test data')
-        #        pb.title('LR Consistency test')
-        #        pb.xscale('log')
-        #        pb.yscale('log')
-        #        pb.xlabel('k (1/Mpc)')
-        #        pb.xlabel('P(k) (Mpc^3)')
-        #        pb.legend()
-        #        pb.savefig('./Plots/emu_ext_test_LR.pdf', dpi=800)
-        #        pb.clf()
             
         return
 
@@ -128,7 +98,6 @@ class gpyMedResStepEmulator:
                                 
                                 
 if __name__ == "__main__":
-    from data_loader import BXL_DMO_Pk
     import random
     from gpy_emulator import gpy_emulator
     

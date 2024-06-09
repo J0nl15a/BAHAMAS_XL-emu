@@ -129,19 +129,8 @@ if __name__ == "__main__":
     print(emu.error)
     emu.plot('ARD')
     quit()
+    
 
-
-
-
-
-    #test_model = random.randint(0, 149)
-    b = pd.read_csv('./BXL_data/weights.csv')
-    test_model = random.randint(100, 149)
-    print('Model = ' + str(test_model))
-    nbk_boost = BXL_DMO_Pk(test_model, 100, pk='nbk-rebin-std', lin='rebin', pad=True, holdout=True)
-    flam = FLAMINGO_DMO_Pk(nbk_boost, 100, cutoff=(.01, 10), lin='camb')
-    #nbk_boost.plot_k()
-    print(nbk_boost.modes)
     #gpy_rbf = gpy_emulator(nbk_boost, RBF)
     #gpy_ard = gpy_emulator(nbk_boost, ARD*Bias, var_fix = True)
     #gpy_ard = gpy_emulator(flam, ARD*Bias, var_fix = True)

@@ -244,14 +244,6 @@ if __name__ == "__main__":
     print(flamingo.LR_mass_res_weights)
     quit()
     
-    print(flamingo.X_test)
-    print(flamingo.Y_test)
-
-    print(flamingo.k[6])
-    print(flamingo.P_k[6])
-    print(flamingo.P_k_interp[6, :])
-    print(flamingo.P_k_nonlinear[6, :])
-    print(flamingo.P_k_boost[6, :])
     
     plt.plot(flamingo.k_test, flamingo.Y_test[0, :], label='1Gpc (High res)')
     plt.plot(flamingo.k_test, flamingo.Y_test[1, :], label='2.8Gpc')
@@ -304,14 +296,4 @@ if __name__ == "__main__":
     plt.ylabel(r'$P_{fiducial}(k)/P_{i}(k)$')
     plt.legend()
     plt.savefig('./Plots/flam_comp_2.pdf', dpi=800)
-    plt.clf()
-
-    plt.plot(nbk_boost.k_test, nbk_boost.Y_test)
-    plt.xscale('log')
-    #plt.yscale('log')
-    plt.title('FLAMINGO models relative to the fiducial run (1Gpc med res)', fontsize=10, wrap=True)
-    plt.xlabel(r'$k \: [1/Mpc]$')
-    plt.ylabel(r'$P_{fiducial}(k)/P_{i}(k)$')
-    plt.legend()
-    plt.savefig('./Plots/test.pdf', dpi=800)
     plt.clf()
