@@ -2,6 +2,10 @@ import numpy as np
 import pylab as pb
 import matplotlib.ticker as ticker
 
+def hypercube_sampling():
+
+    return
+
 def hypercube_plot(data, parameter_labels, save_to, title, dim=(9,9), marker_colour=['tab:blue', 'tab:orange', 'tab:green'], marker_label=['Intermediate', 'Low', 'High'], legend_title='Resolution level:'):
 
     """
