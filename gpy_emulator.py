@@ -17,7 +17,7 @@ ARD = GPy.kern.RBF(9, ARD=True)
 
 class gpyEmulator:
 
-    def __init__(self, data, kern=GPy.kern.RBF(9), var_fix=False, single_k='nan', var=(1,10,.1), save=False, upload=False, ARD=False):
+    def __init__(self, data, kern=GPy.kern.RBF(9), fix_variance=False, single_k='nan', variance=(1,10,.1), save=False, model_upload=False, ARD=False):
         
         self.kern = kern
         if ARD == True:
@@ -25,17 +25,21 @@ class gpyEmulator:
 
         self.data = data
 
-        if single_k == 'nan':
-            self.error = np.zeros((len(self.data.Y_test), self.data.Y_test.shape[0]))
-        else:
-            self.error = np.zeros((len(self.data.Y_test), 1))
-            
+        if self.data.holdout!=False:
+            self.test_model = self.data.holdout
+
+        try:
+            self.error = np.zeros((self.data.Y_test.shape[0], self.data.Y_test.shape[1]))
+        except IndexError:
+            self.error = np.zeros((1, len(self.data.Y_test)))
+
         print(self.data.X_train.shape, self.data.Y_train.shape)
-        if upload == True:
+        if model_upload == True:
             self.model = pickle.load(open("gpy_model.pkl", "rb"))
         else:
             self.model = GPy.models.GPHeteroscedasticRegression(self.data.X_train, np.reshape(self.data.Y_train[:, single_k], (len(self.data.Y_train),1)) if isinstance(single_k, int) else self.data.Y_train, self.kern)
-            if var_fix == True:
+
+            if fix_variance == True:
                 if self.data.test_models in range(50):
                     index1 = 49
                     index2 = 99
@@ -45,9 +49,10 @@ class gpyEmulator:
                 else:
                     index1 = 50
                     index2 = 100
-                self.model.het_Gauss.variance[:index1] = var[0]
-                self.model.het_Gauss.variance[index1:index2] = var[1]
-                self.model.het_Gauss.variance[index2:] = var[2]
+                self.model.het_Gauss.variance[:index1] = variance[0]
+                self.model.het_Gauss.variance[index1:index2] = variance[1]
+                self.model.het_Gauss.variance[index2:] = variance[2]
+
                 #if single_k == 'nan':
                     #self.kern.bias_variance[:index1] = bias_weight[0]
                     #self.kern.bias_variance[index1:index2] = bias_weight[1]
@@ -60,11 +65,12 @@ class gpyEmulator:
                 #self.kern.weight_variance[index1:index2] = var[1]
                 #self.kern.weight_variance[index2:] = var[2]
                 #self.model.het_Gauss.variance[49:99].fix()
-            elif var_fix == False:
+
+            elif fix_variance == False:
                 pass
             self.model.optimize()
         self.y = 10**(self.model._raw_predict(self.data.X_test.reshape(1, -1))[0])
-        self.post_var = self.model._raw_predict(self.data.X_test.reshape(1, -1))[1][0]
+        self.post_variance = self.model._raw_predict(self.data.X_test.reshape(1, -1))[1][0]
         if save == True:
             pickle.dump(self.model, open("gpy_model.pkl", "wb"))
         if self.data.Y_test.ndim > 1:
@@ -79,9 +85,9 @@ class gpyEmulator:
 
         w,h=fi.figaspect(.3)
         fig, (ax1, ax2) = pb.subplots(1, 2, figsize=(w,h))
-        ax1.plot(self.data.k_test, self.data.Y_test, color='b', label=('True P(k) for model_' + f"{self.data.test_models:03d}"))
-        ax1.plot(self.data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted P(k) for model_' + f"{self.data.test_models:03d}"))
-        fig.suptitle('GPy test (kernel = '+f"{name}"+', '+("Intermediate" if self.data.test_models in range(50) else "Low" if self.data.test_models in range(50, 100) else "High")+' resolution)')
+        ax1.plot(self.data.k_test, self.data.Y_test, color='b', label=('True P(k) for model_' + f"{self.test_model:03d}"))
+        ax1.plot(self.data.k_test, self.y.reshape(-1,1), color='r', label=('Predicted P(k) for model_' + f"{self.test_model:03d}"))
+        fig.suptitle('GPy test (kernel = '+f"{name}"+', '+("Intermediate" if self.test_model in range(50) else "Low" if self.test_model in range(50, 100) else "High")+' resolution)')
         ax1.set_xlabel('k (1/Mpc)')
         ax1.set_ylabel('P(k) (Mpc^3)')
         ax1.set_xscale('log')
@@ -95,7 +101,7 @@ class gpyEmulator:
         ax2.hlines(y=1.010, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dashed', alpha=0.5, label=None)
         ax2.hlines(y=0.950, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dotted', alpha=0.5, label='5% error')
         ax2.hlines(y=1.050, xmin=-1, xmax=int(max(self.data.k_test)+1) if max(self.data.k_test)>9.99 else 10, color='k', linestyles='dotted', alpha=0.5, label=None)
-        ax2.plot(self.data.k_test, self.error.reshape(-1,1), label=('model_' + f"{self.data.test_models:03d}" + ' error'))
+        ax2.plot(self.data.k_test, self.error.reshape(-1,1), label=('Emulator error for model_' + f"{self.test_model:03d}"))
         ax2.set_xlabel('k (1/Mpc)')
         ax2.set_ylabel('Residual error')
         ax2.set_xscale('log')
@@ -122,7 +128,7 @@ if __name__ == "__main__":
     bxl.extend_data(pad='emu')
     print(bxl.Y_test)
     
-    weights = pd.read_csv('./BXL_data/weights.csv')
+    #weights = pd.read_csv('./BXL_data/weights.csv')
     emu = gpyEmulator(bxl, ARD=True)
     print(bxl.Y_train)
     print(emu.y)
