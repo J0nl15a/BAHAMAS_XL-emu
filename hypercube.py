@@ -1,12 +1,74 @@
+import math
 import numpy as np
 import pylab as pb
 import matplotlib.ticker as ticker
+from classy import Class
 
-def hypercube_sampling():
+def bahamasxl_hypercube_sampling(number_of_samples, parameters=np.arange(10), save=False, labels=[]):
 
-    return
+    resample = np.full((number_of_samples, len(parameters)), True)
+    test_parameters = np.zeros((number_of_samples, len(parameters)))
+    print(test_parameters)
+    print(resample)
+    bxl_parameters = np.loadtxt('./BXL_data/slhs_nested_3x50_w0_m0p6_m1p2_wa_m1p6_p0p5_with_running_and_fgas_and_As.txt', skiprows=1, max_rows=150, usecols=parameters)
+    sig8 = np.loadtxt('./BXL_data/slhs_nested_3x_Om_fb_h_ns_sigma8_w0_wa_Omnuh2_alphas_fgasfb.txt', max_rows=150, usecols=4)
+    bxl_parameters[:, 4] = sig8
 
-def hypercube_plot(data, parameter_labels, save_to, title, dim=(9,9), marker_colour=['tab:blue', 'tab:orange', 'tab:green'], marker_label=['Intermediate', 'Low', 'High'], legend_title='Resolution level:'):
+    test_parameters = np.random.uniform([min(bxl_parameters[:,i]) for i in parameters], [max(bxl_parameters[:,i]) for i in parameters], (number_of_samples,len(parameters)))
+
+    while True in resample:
+        print(test_parameters)
+        for s in range(number_of_samples):
+            for p in range(len(parameters)):
+                if test_parameters[s,p] in bxl_parameters[:,p]:
+                    test_parameters[s,p] = np.random.uniform(min(bxl_parameters[:,p]), max(bxl_parameters[:,p]), 1)
+                resample[s,p]=False
+
+    test_parameters = np.hstack((test_parameters, test_parameters[:,4].reshape(-1,1)))
+    for s in range(number_of_samples): 
+        params = {"h" : test_parameters[s,2],
+                  "Omega_b" : test_parameters[s,0]*test_parameters[s,1],
+                  "Omega_cdm" : 1-(test_parameters[s,0]*test_parameters[s,1]),
+                  "output": "mPk",
+                  "z_pk" : 0,
+                  "A_s" : 2.1e-9,
+                  "n_s" : test_parameters[s,3],
+                  "alpha_s": test_parameters[s,8],
+        }
+
+        model = Class()
+        model.set(params)
+        model.compute()
+        print(params['A_s'])
+
+        class_sigma8 = model.sigma8()
+        print(class_sigma8)
+        print(test_parameters[s,4])
+
+        #actual_As_v1 = math.sqrt((params['A_s']/class_sigma8)**2) * test_parameters[s,4]
+        actual_As = math.sqrt(((params['A_s']**2)/(class_sigma8**2))*(test_parameters[s,4]**2))
+        #actual_As_v3 = (params['A_s']/class_sigma8) * test_parameters[s,4]
+
+        #print(actual_As_v1)
+        print(actual_As)
+        #print(actual_As_v3)
+
+        test_parameters[s,4] = actual_As
+        
+        model.struct_cleanup()
+        model.empty()
+
+    if save==True:
+        file = open(r'./BXL_data/External_models/External_params.txt', 'w')
+        np.savetxt('./BXL_data/External_models/External_params.txt', '# Omega_m, f_b, h0, ns, A_s, w0, wa, Omeag_nuh^2, alpha_s, fgas/f_b, sigma_8')
+        #for p in param:
+        np.savetxt('./BXL_data/External_models/External_params.txt', np.column_stack([test_parameters]))
+        file.close()
+
+    return test_parameters
+
+
+def hypercube_plot(data, parameter_labels, save_to, title, dim=(10,10), marker_colour=['tab:blue', 'tab:orange', 'tab:green'], marker_label=['Intermediate', 'Low', 'High'], legend_title='Resolution level:'):
 
     """
     A function to generate a scatter triangle plot from a simulation Latin hypercube.
@@ -38,11 +100,14 @@ def hypercube_plot(data, parameter_labels, save_to, title, dim=(9,9), marker_col
                 if len(marker_colour)>1:
                     #Plotting data points in each scatter subplot with desired label and colour
                     for i,d in enumerate(data):
-                        ax[x,y].scatter(d[:, y], d[:, x], s=1, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
+                        if d.ndim>1:
+                            ax[x,y].scatter(d[:, y] if y!=4 else d[:, -1], d[:, x] if x!=4 else d[:, -1], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
+                        else:
+                            ax[x,y].scatter(d[y] if y!=4 else d[-1], d[x] if x!=4 else d[-1], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
 
                 #Plotting data points when only one colour/label is applied
                 else:
-                    ax[x,y].scatter(data[:, y], data[:, x], s=1, color=marker_colour[0], label=marker_label[0] if y==0 and x==1 else None)
+                    ax[x,y].scatter(data[:, y] if y!=4 else d[:, -1], data[:, x] if x!=4 else d[:, -1], s=.5, color=marker_colour[0], label=marker_label[0] if y==0 and x==1 else None)
 
                 #Assigning axis tick values on the plot from the values of the parameter_labels dict
                 if y==0:
@@ -76,7 +141,7 @@ def hypercube_plot(data, parameter_labels, save_to, title, dim=(9,9), marker_col
     #Removing whitespace
     fig.subplots_adjust(wspace=0,hspace=0)
     #Figure title
-    fig.suptitle(title, fontsize=15)
+    fig.suptitle(title, fontsize=15, wrap=True)
     #Creating legend
     le = fig.legend(loc='center right', fontsize=9, title=legend_title)
     for l in range(len(marker_colour)):
@@ -88,12 +153,33 @@ def hypercube_plot(data, parameter_labels, save_to, title, dim=(9,9), marker_col
     return
     
 if __name__ == "__main__":
-    from data_loader import BXL_DMO_Pk
+    from flamingo_data_loader import flamingoDMOData
     import random
+    flam = flamingoDMOData(sigma8=True)
+        
+    test = bahamasxl_hypercube_sampling(10, np.arange(9))
+    print(test)
+    for x in range(test.shape[1]-1):
+        if test[:,x] in flam.parameters[:,x]:
+            print('FAIL')
+            
     
-    t = random.randint(0,149)
-    data = BXL_DMO_Pk(t, 100, pk='nbk-rebin-std', lin='rebin', holdout=False, sigma8=True).parameters
-    labels = {r'$\Omega_m$':[.20,.25,.30,.35], r'$f_b$':[.14,.15,.16,.17], r'$h_0$':[.64,.7,.76], r'$n_s$':[.95,.97,.99], r'$\sigma_8$':[0.72,0.80,0.88], r'$w_0$':[-.7,-.9,-1.1], r'$w_a$':[.2,-.5,-1.2], r'$\Omega_{\nu}h^2$':[.005,.003,.001], r'$\alpha_s$':[.025,0,-.025]}
+    labels = {r'$\Omega_m$':[.20,.25,.30,.35], r'$f_b$':[.14,.15,.16,.17], r'$h_0$':[.64,.7,.76], r'$n_s$':[.95,.97,.99], r'$\sigma_8$':[0.72,0.80,0.88], r'$w_0$':[-.7,-.9,-1.1], r'$w_a$':[.2,-.5,-1.2], r'$\Omega_{\nu}h^2$':[.005,.003,.001], r'$\alpha_s$':[.025,0,-.025]}#, r'$\frac{f_{gas}}{f_b}$':[.4,.5,.6]}
+    marker_colour=['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:grey']
+    marker_label=['Intermediate', 'Low', 'High', 'Test', 'FLAMINGO']
 
     #hypercube = hypercube_plot(data, parameter_labels=labels, save_to='./Plots/BXL_hypercube.png', title='BAHAMAS XL Latin hypercube design', marker_colour=['tab:red'], marker_label=['All data'])
-    hypercube = hypercube_plot(data=[data[:50, :], data[50:100, :], data[100:, :]], parameter_labels=labels, save_to='./Plots/BXL_hypercube.png', title='BAHAMAS XL Latin hypercube design')
+    hypercube = hypercube_plot(dim=(9,9), data=[flam.parameters_sig8[:50, :], flam.parameters_sig8[50:100, :], flam.parameters_sig8[100:, :], test, flam.flamingo_parameters_sig8], parameter_labels=labels, save_to='./Plots/BXL_hypercube_test.png', title='BAHAMAS XL Latin hypercube design w/ test points and FLAMINGO', marker_colour=marker_colour, marker_label=marker_label)
+    #hypercube = hypercube_plot(test, parameter_labels=labels, save_to='./Plots/BXL_hypercube_alltest.png', title='BAHAMAS XL Latin hypercube design', marker_colour=['tab:red'], marker_label=['Test data'])
+
+    for a,b in enumerate([flam.parameters_sig8[:50, :], flam.parameters_sig8[50:100, :], flam.parameters_sig8[100:, :], test, flam.flamingo_parameters_sig8]):
+
+        if b.ndim>1:
+            pb.scatter(b[:, 4], b[:, 4], s=.5, color=marker_colour[a], label=marker_label[a])
+        else:
+            pb.scatter(b[4], b[4], s=.5, color=marker_colour[a], label=marker_label[a])
+
+    pb.title(r'$A_s$ values')
+    pb.legend(loc='center right', fontsize=9, title='Resolution level:')
+    pb.savefig('./Plots/A_s.png', dpi=1200)
+    pb.clf()
