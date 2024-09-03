@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import pylab as pb
 from scipy import interpolate
 import random
 import pandas as pd
@@ -153,13 +153,16 @@ class bahamasXLDMOData:
         self.P_k = np.zeros([150, self.array_size])
         self.P_k_interp = np.zeros([150, len(self.k_test)])
         self.P_k_nonlinear = np.zeros([150, len(self.k_test)])
+
                                 
         if pk == 'powmes':
+            self.noise = np.zeros([150, self.array_size])
             training_directory = glob.glob('/mnt/aridata1/users/arijsalc/BAHAMAS_XL/DMO/model_*_N1260_L*_DMO/power_spectra/power_matter_0122.txt')
 
             for index, directory in enumerate(training_directory):
                 self.k[index, :] = np.loadtxt(directory, skiprows = 20, usecols = 1)[:self.array_size]
                 self.P_k[index, :] = np.loadtxt(directory, skiprows = 20, usecols = 2)[:self.array_size]
+                self.noise[index, :] = np.loadtxt(directory, skiprows = 20, usecols = 3)[:self.array_size]
                 if weight_k == True:
                     self.k[index, :6] = self.k[index, :6]*self.correction_factor
 
@@ -248,55 +251,55 @@ class bahamasXLDMOData:
             linear_limit = [self.array_size+1 for _ in range(150)]
         
         for i in range(50):
-            plt.figure(3)
-            plt.plot(self.k_test, self.P_k_nonlinear[i, :], color ='tab:blue', label=('Padded data' if i==0 else None), linestyle='dashed')
-            plt.plot(self.k_test, self.P_k_nonlinear[i+50, :], color = 'tab:orange', linestyle='dashed')
-            plt.plot(self.k_test, self.P_k_nonlinear[i+100, :], color = 'tab:green', linestyle='dashed')
+            pb.figure(3)
+            pb.plot(self.k_test, self.P_k_nonlinear[i, :], color ='tab:blue', label=('Padded data' if i==0 else None), linestyle='dashed')
+            pb.plot(self.k_test, self.P_k_nonlinear[i+50, :], color = 'tab:orange', linestyle='dashed')
+            pb.plot(self.k_test, self.P_k_nonlinear[i+100, :], color = 'tab:green', linestyle='dashed')
             
-            plt.plot(self.k_test[~self.nan_mask[i, :]], self.P_k_nonlinear[i, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i, :][~self.nan_mask[i, :]], color ='tab:blue', label=('Models 000-049' if i==0 else None))
-            plt.plot(self.k_test[~self.nan_mask[i+50, :]], self.P_k_nonlinear[i+50, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i+50, :][~self.nan_mask[i+50, :]], color = 'tab:orange', label=('Models 050-099' if i==0 else None))
-            plt.plot(self.k_test[~self.nan_mask[i+100, :]], self.P_k_nonlinear[i+100, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i+100, :][~self.nan_mask[i+100, :]], color = 'tab:green', label=('Models 100-149' if i==0 else None))
+            pb.plot(self.k_test[~self.nan_mask[i, :]], self.P_k_nonlinear[i, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i, :][~self.nan_mask[i, :]], color ='tab:blue', label=('Models 000-049' if i==0 else None))
+            pb.plot(self.k_test[~self.nan_mask[i+50, :]], self.P_k_nonlinear[i+50, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i+50, :][~self.nan_mask[i+50, :]], color = 'tab:orange', label=('Models 050-099' if i==0 else None))
+            pb.plot(self.k_test[~self.nan_mask[i+100, :]], self.P_k_nonlinear[i+100, :] if np.any(self.nan_mask)==False else self.P_k_nonlinear[i+100, :][~self.nan_mask[i+100, :]], color = 'tab:green', label=('Models 100-149' if i==0 else None))
  
-            plt.figure(1)
-            plt.plot(self.k[i, :linear_limit[i]], self.P_k[i, :linear_limit[i]]/self.linear_interpolation_function[i](self.k[i, :linear_limit[i]]) if self.lin!='rebin' else self.P_k[i, :linear_limit[i]], color='tab:blue', label=('Models 000-049' if i==0 else None))
-            plt.plot(self.k[i+50, :linear_limit[i+50]], self.P_k[i+50, :linear_limit[i+50]]/self.linear_interpolation_function[i+50](self.k[i+50, :linear_limit[i+50]]) if self.lin!='rebin' else self.P_k[i+50, :linear_limit[i+50]], color='tab:orange', label=('Models 050-099' if i==0 else None))
-            plt.plot(self.k[i+100, :linear_limit[i+100]], self.P_k[i+100, :linear_limit[i+100]]/self.linear_interpolation_function[i+100](self.k[i+100, :linear_limit[i+100]]) if self.lin!='rebin' else self.P_k[i+100, :linear_limit[i+100]], color='tab:green', label=('Models 100-149' if i==0 else None))
+            pb.figure(1)
+            pb.plot(self.k[i, :linear_limit[i]], self.P_k[i, :linear_limit[i]]/self.linear_interpolation_function[i](self.k[i, :linear_limit[i]]) if self.lin!='rebin' else self.P_k[i, :linear_limit[i]], color='tab:blue', label=('Models 000-049' if i==0 else None))
+            pb.plot(self.k[i+50, :linear_limit[i+50]], self.P_k[i+50, :linear_limit[i+50]]/self.linear_interpolation_function[i+50](self.k[i+50, :linear_limit[i+50]]) if self.lin!='rebin' else self.P_k[i+50, :linear_limit[i+50]], color='tab:orange', label=('Models 050-099' if i==0 else None))
+            pb.plot(self.k[i+100, :linear_limit[i+100]], self.P_k[i+100, :linear_limit[i+100]]/self.linear_interpolation_function[i+100](self.k[i+100, :linear_limit[i+100]]) if self.lin!='rebin' else self.P_k[i+100, :linear_limit[i+100]], color='tab:green', label=('Models 100-149' if i==0 else None))
             
-            plt.figure(2)
+            pb.figure(2)
             k_fund_low = (2*np.pi)/1400
-            plt.plot(self.k[i, :linear_limit[i]]/(k_fund_low*2), self.P_k[i, :linear_limit[i]]/self.linear_interpolation_function[i](self.k[i, :linear_limit[i]]) if self.lin!='rebin' else self.P_k[i, :linear_limit[i]], color='tab:blue', label=('Models 000-049' if i==0 else None))
-            plt.plot(self.k[i+50, :linear_limit[i+50]]/k_fund_low, self.P_k[i+50, :linear_limit[i+50]]/self.linear_interpolation_function[i+50](self.k[i+50, :linear_limit[i+50]]) if self.lin!='rebin' else self.P_k[i+50, :linear_limit[i+50]], color='tab:orange', label=('Models 050-099' if i==0 else None))
-            plt.plot(self.k[i+100, :linear_limit[i+100]]/(k_fund_low*4), self.P_k[i+100, :linear_limit[i+100]]/self.linear_interpolation_function[i+100](self.k[i+100, :linear_limit[i+100]]) if self.lin!='rebin' else self.P_k[i+100, :linear_limit[i+100]], color='tab:green', label=('Models 100-149' if i==0 else None))
+            pb.plot(self.k[i, :linear_limit[i]]/(k_fund_low*2), self.P_k[i, :linear_limit[i]]/self.linear_interpolation_function[i](self.k[i, :linear_limit[i]]) if self.lin!='rebin' else self.P_k[i, :linear_limit[i]], color='tab:blue', label=('Models 000-049' if i==0 else None))
+            pb.plot(self.k[i+50, :linear_limit[i+50]]/k_fund_low, self.P_k[i+50, :linear_limit[i+50]]/self.linear_interpolation_function[i+50](self.k[i+50, :linear_limit[i+50]]) if self.lin!='rebin' else self.P_k[i+50, :linear_limit[i+50]], color='tab:orange', label=('Models 050-099' if i==0 else None))
+            pb.plot(self.k[i+100, :linear_limit[i+100]]/(k_fund_low*4), self.P_k[i+100, :linear_limit[i+100]]/self.linear_interpolation_function[i+100](self.k[i+100, :linear_limit[i+100]]) if self.lin!='rebin' else self.P_k[i+100, :linear_limit[i+100]], color='tab:green', label=('Models 100-149' if i==0 else None))
 
-        plt.figure(1)
-        plt.title(r'Boost function vs $k$ for all models', fontsize=10, wrap=True)
-        plt.xlabel(r'$k \: [1/Mpc]$')
-        plt.ylabel(r'$P(k) \: [Mpc^3]$')
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.legend()
-        plt.savefig(f'./Plots/Classbased_BOOSTVK.{file_type}', dpi=800)
-        plt.clf()
+        pb.figure(1)
+        pb.title(r'Boost function vs $k$ for all models', fontsize=10, wrap=True)
+        pb.xlabel(r'$k \: [1/Mpc]$')
+        pb.ylabel(r'$P(k) \: [Mpc^3]$')
+        pb.xscale('log')
+        pb.yscale('log')
+        pb.legend()
+        pb.savefig(f'./Plots/Classbased_BOOSTVK.{file_type}', dpi=800)
+        pb.clf()
         
-        plt.figure(2)
-        plt.title(r'Boost function vs $k$/$k_{fundamental}$ for all models', fontsize=10, wrap=True)
-        plt.xlabel(r'$k \: [1/Mpc]$')
-        plt.ylabel(r'$P(k) \: [Mpc^3]$')
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.legend()
-        plt.savefig(f'./Plots/Classbased_BOOSTVKFUND.{file_type}', dpi=800)
-        plt.clf()
+        pb.figure(2)
+        pb.title(r'Boost function vs $k$/$k_{fundamental}$ for all models', fontsize=10, wrap=True)
+        pb.xlabel(r'$k \: [1/Mpc]$')
+        pb.ylabel(r'$P(k) \: [Mpc^3]$')
+        pb.xscale('log')
+        pb.yscale('log')
+        pb.legend()
+        pb.savefig(f'./Plots/Classbased_BOOSTVKFUND.{file_type}', dpi=800)
+        pb.clf()
         
-        plt.figure(3)
-        plt.title(r'$P(k)$ vs test_k for all models', fontsize=10, wrap=True)
-        plt.xlabel(r'$k \: [1/Mpc]$')
-        plt.ylabel(r'$P(k) \: [Mpc^3]$')
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.legend()
-        plt.savefig(f'./Plots/Classbased_TESTCASE.{file_type}', dpi=800)
-        plt.clf()
+        pb.figure(3)
+        pb.title(r'$P(k)$ vs test_k for all models', fontsize=10, wrap=True)
+        pb.xlabel(r'$k \: [1/Mpc]$')
+        pb.ylabel(r'$P(k) \: [Mpc^3]$')
+        pb.xscale('log')
+        pb.yscale('log')
+        pb.legend()
+        pb.savefig(f'./Plots/Classbased_TESTCASE.{file_type}', dpi=800)
+        pb.clf()
         return
 
     
@@ -327,7 +330,7 @@ if __name__ == "__main__":
 
     test_models = random.randint(0, 149)
     
-    nbk_boost = bahamasXLDMOData(pk='nbk-rebin-std', lin='rebin', holdout=test_models, log=False)
+    nbk_boost = bahamasXLDMOData(pk='powmes', lin='class', holdout=test_models, log=False)
     print(nbk_boost.P_k_nonlinear)
     nbk_boost.extend_data('emu')
     print(nbk_boost.P_k_nonlinear)
@@ -340,5 +343,25 @@ if __name__ == "__main__":
     #print(nbk_boost.X_test)
     #print(nbk_boost.Y_test)
     nbk_boost.plot_k()
-    quit()
-        
+
+    hr = random.randint(100, 149)
+    ir = random.randint(0, 49)
+    lr = random.randint(50, 99)
+
+    for x in range(50):
+        pb.plot(nbk_boost.k[x], nbk_boost.P_k[x], color='tab:blue', label='Intermediate Res' if x==0 else None)
+        pb.plot(nbk_boost.k[x+50], nbk_boost.P_k[x+50], color='tab:orange', label='Low Res' if x==0 else None)
+        pb.plot(nbk_boost.k[x+100], nbk_boost.P_k[x+100], color='tab:green', label='High Res' if x==0 else None)
+        pb.plot(nbk_boost.k[x], nbk_boost.noise[x], color='tab:red', linestyle='dashed', label='Shot noise (IR)' if x==0 else None)
+        pb.plot(nbk_boost.k[x+50], nbk_boost.noise[x+50], color='tab:purple', linestyle='dashed', label='Shot noise (LR)' if x==0 else None)
+        pb.plot(nbk_boost.k[x+100], nbk_boost.noise[x+100], color='tab:brown', linestyle='dashed', label='Shot noise (HR)' if x==0 else None)
+
+    pb.title(r'BAHAMAS XL non-linear spectra', fontsize=10, wrap=True)
+    pb.xlabel(r'$k \: [1/Mpc]$')
+    pb.ylabel(r'$P(k) \: [Mpc^3]$')
+    pb.xscale('log')
+    pb.yscale('log')
+    pb.legend()
+    pb.savefig(f'./Plots/BXL_raw_data.png', dpi=1200)
+    pb.clf()
+

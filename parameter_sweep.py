@@ -59,6 +59,7 @@ if __name__ == "__main__":
     #test[8,7] = Omega_nu_samples
     #test[1:,8] = alpha_s_samples
     test[1:,8] = params
+    #test[1:,6] = 0
     #print(flamingo.design_min)
     #print(flamingo.design_max)
     print(test)
@@ -80,5 +81,16 @@ if __name__ == "__main__":
     pb.legend(loc='upper left', fontsize=10)
     
     pb.savefig(f'./Plots/parameter_sweep_test.png', dpi=1200)
+    pb.clf()
+
+    for i in range(len(pred)-1):
+        pb.plot(f.k_test, pred[i+1]/pred[0], label=rf'$\alpha_s$ = {params[i-1]}')
+    pb.xlabel(r'$k \: [1/Mpc]$', fontsize=15)
+    pb.ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
+    pb.xscale('log')
+    pb.yscale('log')
+    pb.title(f'Parameter sweeps predictions/FLAMINGO')
+    pb.legend(loc='upper left', fontsize=6)
+    pb.savefig(f'./Plots/parameter_sweep_residual.png', dpi=1200)
     pb.clf()
     

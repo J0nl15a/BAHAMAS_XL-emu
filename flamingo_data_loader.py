@@ -272,10 +272,16 @@ class flamingoDMOData(bahamasXLDMOData):
                 plt.savefig(f'./Plots/emulator_weights_mass_res.{file_type}', dpi=1200)
                 plt.clf()
 
-                for i in range(50):
-                    plt.plot(self.k_test, (self.HR_mass_res_weights-1)*self.Y_train[i+100,:], color='tab:green', label='High Res' if i==0 else None)
-                    plt.plot(self.k_test, (self.IR_mass_res_weights-1)*self.Y_train[i,:], color='tab:blue', label='Intermediate Res' if i==0 else None)
-                    plt.plot(self.k_test, (self.LR_mass_res_weights-1)*self.Y_train[i+50,:], color='tab:orange', label='Low Res' if i==0 else None)
+                print(self.LR_mass_res_weights)
+                print([self.LR_mass_res_weights[k]-min(self.HR_mass_res_weights[k],self.IR_mass_res_weights[k],self.LR_mass_res_weights[k]) for k in range(len(self.k_test))])
+                weights_HR_norm = [((self.HR_mass_res_weights[k]-min(self.HR_mass_res_weights[k],self.IR_mass_res_weights[k],self.LR_mass_res_weights[k]))*self.Y_train[100:,k])**2 for k in range(len(self.k_test))]
+                weights_IR_norm = [((self.IR_mass_res_weights[k]-min(self.HR_mass_res_weights[k],self.IR_mass_res_weights[k],self.LR_mass_res_weights[k]))*self.Y_train[:50,k])**2 for k in range(len(self.k_test))]
+                weights_LR_norm = [((self.LR_mass_res_weights[k]-min(self.HR_mass_res_weights[k],self.IR_mass_res_weights[k],self.LR_mass_res_weights[k]))*self.Y_train[50:100,k])**2 for k in range(len(self.k_test))]
+                print(weights_LR_norm)
+                #for i in range(50):
+                plt.plot(self.k_test, weights_HR_norm, color='tab:green')#, label='High Res')
+                plt.plot(self.k_test, weights_IR_norm, color='tab:blue')#, label='Intermediate Res')
+                plt.plot(self.k_test, weights_LR_norm, color='tab:orange')#, label='Low Res')
                 plt.title('Weights calculated internally for the emulator, for mass resolution effects', wrap=True)
                 plt.xlabel('k (1/Mpc)')
                 plt.ylabel('Variance')
@@ -291,7 +297,7 @@ class flamingoDMOData(bahamasXLDMOData):
 if __name__ == "__main__":
     import pdb
     
-    flamingo = flamingoDMOData(pk='nbk-rebin-std', lin='class', flamingo_lin='class')
+    flamingo = flamingoDMOData(pk='powmes', lin='class', flamingo_lin='class', log=False)
     print(flamingo.P_k_nonlinear)
     print(flamingo.k)
     print(flamingo.P_k)

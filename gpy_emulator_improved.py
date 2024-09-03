@@ -32,7 +32,8 @@ class gpyImprovedEmulator:
         if flamingo==True:
             self.pred = np.zeros(self.data.Y_test.shape[1])
             self.error = np.zeros((self.data.Y_test.shape[0], self.data.Y_test.shape[1]))
-        
+
+        self.weights = np.zeros((149 if not isinstance(self.data.holdout, bool) else 150, len(self.data.k_test)))
         print(data.k_test)
         for i,k in enumerate(self.data.k_test):
             print(i)
@@ -65,7 +66,7 @@ class gpyImprovedEmulator:
                 print(np.reshape(self.data.Y_train[:3, i], (3,1)))
                 self.model = GPy.models.GPHeteroscedasticRegression(self.data.X_train, np.reshape(self.data.Y_train[:, i], (len(self.data.Y_train),1)), self.kernel)
                 #self.model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[100:, :], np.reshape(self.data.Y_train[100:, i], (50,1)), self.kernel)
-
+                
                 if fix_variance == True:
                     index1 = 50
                     index2 = 100
@@ -80,29 +81,42 @@ class gpyImprovedEmulator:
                     print(self.model.het_Gauss.variance[50])
                     print(self.model.het_Gauss.variance[100])
 
-                    self.model.het_Gauss.variance[:index1] *= self.var[0]-min(self.var)
-                    self.model.het_Gauss.variance[index1:index2] *= self.var[1]-min(self.var)
-                    self.model.het_Gauss.variance[index2:] *= self.var[2]-min(self.var)
-                    
-                    #self.model.het_Gauss.variance[:index1] *= ((self.var[0]-min(self.var))*self.data.Y_train[:index1, i]).reshape(index1,1)
-                    #self.model.het_Gauss.variance[index1:index2] *= ((self.var[1]-min(self.var))*self.data.Y_train[index1:index2, i]).reshape(index2-index1,1)
+                    #self.model.het_Gauss.variance[:index1] *= self.var[0]-min(self.var)
+                    #self.model.het_Gauss.variance[index1:index2] *= self.var[1]-min(self.var)
+                    #self.model.het_Gauss.variance[index2:] *= self.var[2]-min(self.var)
+
+                    #if k<0.1:
+                    self.model.het_Gauss.variance[:index1] = 1e-5+((self.var[0]-min(self.var))*self.data.Y_train[:index1, i]).reshape(index1,1)**2
+                    self.model.het_Gauss.variance[index1:index2] = 1e-5+((self.var[1]-min(self.var))*self.data.Y_train[index1:index2, i]).reshape(index2-index1,1)**2
+                    if not isinstance(self.data.holdout, bool):
+                        self.model.het_Gauss.variance[index2:] = 1e-5+((self.var[2]-min(self.var))*self.data.Y_train[index2:, i]).reshape(150-(index2+1),1)**2
+                    else:
+                        self.model.het_Gauss.variance[index2:] = 1e-5+((self.var[2]-min(self.var))*self.data.Y_train[index2:, i]).reshape(150-(index2),1)**2
+
+                    #self.model.het_Gauss.variance[:index1] = 1e-5+2*((self.var[0])*self.data.Y_train[:index1, i]).reshape(index1,1)**2
                     #if not isinstance(self.data.holdout, bool):
-                        #self.model.het_Gauss.variance[index2:] *= ((self.var[2]-min(self.var))*self.data.Y_train[index2:, i]).reshape(150-(index2+1),1)
+                    #    self.model.het_Gauss.variance[index2:] = 1e-5+((self.var[2])*self.data.Y_train[index2:, i]).reshape(150-(index2+1),1)**2
                     #else:
-                        #self.model.het_Gauss.variance[index2:] *= ((self.var[2]-min(self.var))*self.data.Y_train[index2:, i]).reshape(150-(index2),1)
-
+                    #    self.model.het_Gauss.variance[index2:] = 1e-5+((self.var[2])*self.data.Y_train[index2:, i]).reshape(150-(index2),1)**2
+                    #self.model.het_Gauss.variance[index1:index2] = 1e-5+4*((self.var[1])*self.data.Y_train[index1:index2, i]).reshape(index2-index1,1)**2
+                        
                     self.model.het_Gauss.variance.fix()
-
+                    
                     print(self.model.het_Gauss.variance[0])
                     print(self.model.het_Gauss.variance[50])
                     print(self.model.het_Gauss.variance[100])
                     #self.model.het_Gauss.variance[:index1] *= self.var[2]
 
                 self.model.optimize()
+                self.weights[:index1, i] = self.model.het_Gauss.variance[:index1].flatten()
+                self.weights[index1:index2, i] = self.model.het_Gauss.variance[index1:index2].flatten()
+                self.weights[index2:, i] = self.model.het_Gauss.variance[index2:].flatten()
+                
                 print(self.model.het_Gauss.variance[0])
                 print(self.model.het_Gauss.variance[50])
                 print(self.model.het_Gauss.variance[100])
                 print(self.model.het_Gauss.variance)
+
                 
             if self.data.X_test.ndim > 1:
                 model_output = self.model._raw_predict(self.data.X_test.reshape(len(self.data.X_test), -1))
@@ -222,11 +236,25 @@ if __name__ == '__main__':
 
     model=np.random.randint(100,150)
     flamingo=False
-    boost = flamingoDMOData(pk='nbk-rebin-std', lin='rebin', log=False, holdout=model)
+    boost = flamingoDMOData(pk='powmes', lin='class', log=False, holdout=model)
     boost.weights()
     emulator = gpyImprovedEmulator(boost, 'variance_weights', fix_variance=True, ARD=True, flamingo=flamingo)
     #emulator.plot('ARD')
     print(boost.X_test)
+
+    print(emulator.weights)
+    #for i in range(50):
+    #    pb.plot(boost.k_test, emulator.weights[i+100, :], color='tab:green', label='High Res' if i==0 else None)
+    #    pb.plot(boost.k_test, 2*emulator.weights[i, :], color='tab:blue', label='Intermediate Res' if i==0 else None)
+    #    pb.plot(boost.k_test, 4*emulator.weights[i+50, :], color='tab:orange', label='Low Res' if i==0 else None)
+    #pb.title('Weights calculated internally for the emulator, for mass resolution effects', wrap=True)
+    #pb.xlabel('k (1/Mpc)')
+    #pb.ylabel('Variance')
+    #pb.xscale('log')
+    #pb.xlim(right=20)
+    #pb.legend(loc='upper left', fontsize=10)
+    #pb.savefig(f'./Plots/emulator_computed_weights.png', dpi=1200)
+    #pb.clf()
     #quit()
 
     test_error=[]
@@ -234,7 +262,7 @@ if __name__ == '__main__':
     for k in range(len(tests)):
         error = []
         for m in range(tests[k][1], tests[k][2]):
-            model_boost = flamingoDMOData(pk='nbk-rebin-std', lin='rebin', log=False, holdout=m)
+            model_boost = flamingoDMOData(pk='powmes', lin='class', log=False, holdout=m)
             model_boost.weights()
             model_emulator = gpyImprovedEmulator(model_boost, 'variance_weights', fix_variance=True, ARD=True, flamingo=flamingo)
             print(model_emulator.error)
@@ -252,11 +280,14 @@ if __name__ == '__main__':
     pb.hlines(y=1.050, xmin=-1, xmax=int(max(emulator.data.k_test)+1) if max(emulator.data.k_test)>9.99 else 10, color='k', linestyles='dotted', alpha=0.5, label=None)
 
     pb.plot(emulator.data.k_test, test_error[0], color='tab:green', linestyle='dashed', label='Padded data')
-    pb.plot(emulator.data.k_test[1:], test_error[0][1:], color='tab:green', label=f'Average {tests[0][0]} error')
+    #pb.plot(emulator.data.k_test[1:], test_error[0][1:], color='tab:green', label=f'Average {tests[0][0]} error')
+    pb.plot(emulator.data.k_test[~model_boost.nan_mask[100,:]], test_error[0][~model_boost.nan_mask[100,:]], color='tab:green', label=f'Average {tests[0][0]} error')
     pb.plot(emulator.data.k_test, test_error[1], color='tab:orange', linestyle='dashed')
-    pb.plot(emulator.data.k_test[1:], test_error[1][1:], color='tab:orange', label=f'Average {tests[1][0]} error')
+    #pb.plot(emulator.data.k_test[1:], test_error[1][1:], color='tab:orange', label=f'Average {tests[1][0]} error')
+    pb.plot(emulator.data.k_test[~model_boost.nan_mask[50,:]], test_error[1][~model_boost.nan_mask[50,:]], color='tab:orange', label=f'Average {tests[1][0]} error')
     pb.plot(emulator.data.k_test, test_error[2], color='tab:blue', linestyle='dashed')
-    pb.plot(emulator.data.k_test[1:], test_error[2][1:], color='tab:blue', label=f'Average {tests[2][0]} error')
+    #pb.plot(emulator.data.k_test[1:], test_error[2][1:], color='tab:blue', label=f'Average {tests[2][0]} error')
+    pb.plot(emulator.data.k_test[~model_boost.nan_mask[0,:]], test_error[2][~model_boost.nan_mask[0,:]], color='tab:blue', label=f'Average {tests[2][0]} error')
     pb.title(f'Average error on all model resolutions')
     if max(test_error[0]) > 1.2 and min(test_error[0]) < 0.8:
         pb.ylim(top=1.2, bottom=0.8)
@@ -272,3 +303,5 @@ if __name__ == '__main__':
     pb.legend(loc='upper center')
     pb.savefig(f'./Plots/gpy_improved_avg_error.png')
     pb.clf()
+
+    
