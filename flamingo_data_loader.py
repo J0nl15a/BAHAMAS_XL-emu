@@ -9,43 +9,42 @@ import matplotlib.colors as mcolors
     
 class flamingoDMOData(bahamasXLDMOData):
 
-    def __init__(self, bins=100, test_cosmology=False, cutoff=(-1, 10), cosmo_params=np.arange(9), pk='nbk-rebin-std', lin='rebin', flamingo_lin='camb', boost=True, log=True, holdout=False, sigma8=False, plot_hypercube=False, weight_k=True):
-        
-        super().__init__(test_cosmology=test_cosmology, bins=bins, cutoff=cutoff, cosmo_params=cosmo_params, pk=pk, lin=lin, boost=boost, log=log, holdout=holdout, sigma8=sigma8, plot_hypercube=plot_hypercube, weight_k=weight_k)
+    def __init__(self, bins=100, test_cosmology=False, cutoff=(-1, 10), cosmo_params=np.arange(9), resolution='HR', pk='powmes', lin='camb', flamingo_lin='camb', boost=True, log=True, holdout=False, sigma8=True, plot_hypercube=False, weight_k=True):
 
-        #if pk=='nbk-rebin-std' or pk=='nbk-rebin':
-        super().extend_data(pad='emu')
-                
         #The parameters file
         self.flamingo_parameters = np.loadtxt('./BXL_data/FLAMINGO_data/FLAMINGO_params.txt', skiprows=1, usecols=cosmo_params)
         if sigma8==True:
+            self.flamingo_As = self.flamingo_parameters[4].copy()
             sig8 = np.loadtxt('./BXL_data/FLAMINGO_data/FLAMINGO_params.txt', skiprows=1, usecols=10)
-            self.flamingo_parameters_sig8 = np.hstack((self.flamingo_parameters.copy(), sig8))
+            self.flamingo_parameters[4] = sig8
 
-        #Normalize the design to be between 0,1
-        self.flamingo_parameters_norm = (self.flamingo_parameters-self.design_min)/(self.design_max-self.design_min)
-        if not isinstance(test_cosmology, bool):
-            self.X_test = (self.test_cosmology-self.design_min)/(self.design_max-self.design_min)
-        else:
-            self.X_test = self.flamingo_parameters_norm.copy()
+        self.flamingo_particle_masses = np.loadtxt('./BXL_data/FLAMINGO_data/FLAMINGO_DM_masses.txt').reshape(-1,1)
+        self.flamingo_parameters = np.tile(self.flamingo_parameters, (14,1))
+        self.flamingo_parameters = np.hstack((self.flamingo_parameters, self.flamingo_particle_masses))
+        
+        super().__init__(test_cosmology=test_cosmology, bins=bins, cutoff=cutoff, cosmo_params=cosmo_params, resolution=resolution, pk=pk, lin=lin, boost=boost, log=log, holdout=holdout, sigma8=sigma8, plot_hypercube=plot_hypercube, weight_k=weight_k)
+        
+        super().extend_data(pad='emu')
+
         
         self.flamingo_k = []
         self.flamingo_P_k = []
         self.flamingo_P_k_interp = np.zeros([14, self.bins])
         self.flamingo_P_k_nonlinear = np.zeros([14, self.bins])
-
+        
         if flamingo_lin == 'camb':
             self.flamingo_camb_linear = np.loadtxt('./BXL_data/FLAMINGO_data/FLAMINGO_camb_pk.txt', usecols=(0,1))
-            k_linear = self.flamingo_camb_linear[:,0]*(self.flamingo_parameters[2])
-            Pk_linear = self.flamingo_camb_linear[:,1]/(self.flamingo_parameters[2]**3)
+            self.flamingo_k_linear = self.flamingo_camb_linear[:,0]*(self.flamingo_parameters[0,2])
+            self.flamingo_Pk_linear = self.flamingo_camb_linear[:,1]/(self.flamingo_parameters[0,2]**3)
             
-            flamingo_linear_interpolation_function = interpolate.interp1d(k_linear, Pk_linear, kind='cubic', bounds_error=False, fill_value=np.nan)
+            flamingo_linear_interpolation_function = interpolate.interp1d(self.flamingo_k_linear, self.flamingo_Pk_linear, kind='cubic', bounds_error=False, fill_value=np.nan)
             #self.flamingo_linear_spectra = flamingo_linear_interpolation_function(self.k_test)
-
         elif flamingo_lin == 'class':
             self.flamingo_class_linear = np.loadtxt('./BXL_data/FLAMINGO_data/FLAMINGO_CLASS_linear_pk.txt', usecols=(0,1))
+            self.flamingo_k_linear = self.flamingo_class_linear[:,0]
+            self.flamingo_Pk_linear = self.flamingo_class_linear[:,1]
         
-            flamingo_linear_interpolation_function = interpolate.interp1d(self.flamingo_class_linear[:,0], self.flamingo_class_linear[:,1], kind='cubic', bounds_error=False, fill_value=np.nan)
+            flamingo_linear_interpolation_function = interpolate.interp1d(self.flamingo_k_linear, self.flamingo_Pk_linear, kind='cubic', bounds_error=False, fill_value=np.nan)
             #self.flamingo_linear_spectra = flamingo_linear_interpolation_function(self.k_test)
             
         elif flamingo_lin == 'rebin':
@@ -55,24 +54,7 @@ class flamingoDMOData(bahamasXLDMOData):
 
         #This is used to build up k, the full P(k), linear P(k) and non-linear P(k)
         for s in range(len(self.flamingo_sims)):
-            flamingo_directory = './BXL_data/FLAMINGO_data/power_matter_L'+f"{self.flamingo_sims[s][0]:04d}"+'N'+f"{self.flamingo_sims[s][1]:04d}"+'_DMO_z0.txt'
-
-            #try:
-            #    flamingo_model = np.loadtxt(flamingo_directory, skiprows = 20, usecols = (1,2,3))
-            #    for x in range(len(flamingo_model)):
-            #        if flamingo_model[x,1] < flamingo_model[x,2]:
-            #            array_size = x-1
-            #            break
-            #except ValueError:
-            #    flamingo_model = np.loadtxt(flamingo_directory, skiprows = 20, usecols = (1,2))
-            #    for x in range(len(flamingo_model)):
-            #        if flamingo_model[x,0] > 100:
-            #            array_size = x-1
-            #            break
-
-            #flamingo_model[:6,0] = flamingo_model[:6,0]*self.correction_factor
-            #self.flamingo_k.append(flamingo_model[:array_size, 0])                
-            #self.flamingo_P_k.append(flamingo_model[:array_size, 1])
+            flamingo_directory = f'./BXL_data/FLAMINGO_data/power_matter_L{self.flamingo_sims[s][0]:04d}N{self.flamingo_sims[s][1]:04d}_DMO_z0.txt'
 
             flamingo_model = np.loadtxt(flamingo_directory, skiprows = 20, usecols = (1,2))
             flamingo_model[:6,0] = flamingo_model[:6,0]*self.correction_factor
@@ -87,36 +69,15 @@ class flamingoDMOData(bahamasXLDMOData):
             self.flamingo_k[s] = self.flamingo_k[s][mask]
             self.flamingo_P_k[s] = self.flamingo_P_k[s][mask]
             
-            #h = interpolate.interp1d(self.flamingo_k[s], self.flamingo_P_k[s], kind='cubic', bounds_error=False, fill_value=np.nan)
             h = interpolate.interp1d(self.flamingo_k[s], self.flamingo_boost, kind='cubic', bounds_error=False, fill_value=np.nan)
-
-            #try:
-            #    self.flamingo_P_k_interp[s, :] = h(self.k_test)
-            #except ValueError as v:
-            #    if "below the interpolation range's minimum value" in str(v):
-            #        minimum_index = min(filter(lambda k: k[1] > min(flamingo_model[:array_size, 0]), enumerate(self.k_test)))[0]
-
-            #        self.flamingo_P_k_interp[s, :minimum_index] = 0
-            #        self.flamingo_P_k_interp[s, minimum_index:] = h(self.k_test[minimum_index:])
-            #    elif "above the interpolation range's maximum value" in str(v):
-            #        maximum_index = max(filter(lambda k: k[1] < max(flamingo_model[:array_size, 0]), enumerate(self.k_test)))[0]
-                    
-            #        self.flamingo_P_k_interp[s, :maximum_index] = h(self.k_test[:maximum_index])
-            #        self.flamingo_P_k_interp[s, maximum_index:] = 0
 
             self.flamingo_P_k_interp[s, :] = h(self.k_test)
             
-                    
-        #if boost == True:
-            #self.flamingo_P_k_nonlinear = self.flamingo_P_k_interp.copy() / self.flamingo_linear_spectra.copy()
-        #else:
         self.flamingo_P_k_nonlinear = self.flamingo_P_k_interp.copy()
 
-        #self.flamingo_mask = (self.flamingo_P_k_nonlinear == 0)
         self.flamingo_mask = np.isnan(self.flamingo_P_k_nonlinear)
         ones = np.ones(self.flamingo_P_k_nonlinear.shape)
         self.flamingo_P_k_nonlinear[self.flamingo_mask] = ones[self.flamingo_mask]
-
         
         if not isinstance(self.holdout, bool):
             self.Y_test = self.Y_test
@@ -124,6 +85,10 @@ class flamingoDMOData(bahamasXLDMOData):
             self.Y_test = self.Y_test
         else:
             self.Y_test = self.flamingo_P_k_nonlinear.copy()
+
+        if isinstance(test_cosmology, bool) and isinstance(holdout, bool):
+            self.X_test = np.delete(self.X_test, [4,-1], axis=0)
+            self.Y_test = np.delete(self.Y_test, [4,-1], axis=0)
 
         return
 
@@ -307,6 +272,8 @@ if __name__ == "__main__":
     print(flamingo.Y_train)
     print(flamingo.X_test)
     print(flamingo.Y_test)
+    quit()
     flamingo.plot_k_flamingo()
     flamingo.weights(plot_weights='mass_res')
     print(flamingo.LR_mass_res_weights)
+    print(flamingo.X_test*(flamingo.design_max-flamingo.design_min)+flamingo.design_min)

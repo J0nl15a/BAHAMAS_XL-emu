@@ -15,23 +15,53 @@ kmax = max(k)
 #nk = 100
 
 # Cosmological parameters
-h = flamingo.flamingo_parameters[2]
-omega_m = flamingo.flamingo_parameters[0]
-f_b = flamingo.flamingo_parameters[1]
-omega_b = omega_m*f_b
-omega_cdm = omega_m-omega_b
-A_s = flamingo.flamingo_parameters[4]
-n_s = flamingo.flamingo_parameters[3]
 
-params = {"h" : h,
-          "Omega_b" : omega_b,
-          "Omega_cdm" : omega_cdm,
+
+h = flamingo.flamingo_parameters[8,2]
+omega_m = flamingo.flamingo_parameters[8,0]
+f_b = flamingo.flamingo_parameters[8,1]
+omega_nu = flamingo.flamingo_parameters[8,7] / h**2
+omega_b = omega_m*f_b
+omega_cdm = omega_m-omega_b-omega_nu
+A_s = flamingo.flamingo_As
+n_s = flamingo.flamingo_parameters[8,3]
+w0 = flamingo.flamingo_parameters[8,5]
+wa = flamingo.flamingo_parameters[8,6]
+alpha_s = flamingo.flamingo_parameters[8,8]
+sig8 = flamingo.flamingo_parameters[8,4]
+
+print(h, omega_m, f_b, omega_nu, omega_b, omega_cdm, A_s, n_s, w0, wa, alpha_s, sig8)
+
+params = {"h": h,
+          "Omega_cdm": omega_cdm,
+          "Omega_b": omega_b,
+          "Omega_Lambda": 0,  # use dark fluid instead
+          "Omega_ncdm": omega_nu,
+          "N_ncdm": 1,
+          "deg_ncdm": 3,
+          "ncdm_fluid_approximation": 3,
+          "T_ncdm": 1.9517578050 / 2.7255, # specified in units of T_cmb
+          "T_cmb": 2.7255,
+          "N_ur": 0.00441,
+          "fluid_equation_of_state": "CLP",
+          "w0_fld": w0,
+          "wa_fld": wa,
+          "cs2_fld": 1.0,
+          #"A_s": A_s[i],
+          "sigma8": sig8,
+          "n_s": n_s,
+          "k_pivot": 0.05,
+          "alpha_s": alpha_s,
+          "reio_parametrization": "reio_none",
+          "YHe": "BBN",
+          "compute damping scale": "yes",
+          "tol_background_integration": 1e-12,
+          "tol_ncdm_bg": 1e-10,
+          "P_k_max_1/Mpc": 30,
+          "non linear": "halofit",
           "output": "mPk",
-          "z_pk" : z,
-          "A_s" : A_s,
-          "n_s" : n_s,
-          "P_k_max_1/Mpc" : kmax,
-          }
+          "z_pk" : 0
+}
 
 # Run CLASS
 model = Class()
@@ -44,14 +74,14 @@ Pk_true = np.loadtxt('./BXL_data/FLAMINGO_data/power_matter_L1000N3600_DMO_z0.tx
 
 # Extract the power spectrum (in Mpc^3)
 for i in range(len(k)):
-    Pk[i] = model.pk(k[i], z)
+    Pk[i] = model.pk_lin(k[i], z)
 
 file = open(r'./BXL_data/FLAMINGO_data/FLAMINGO_CLASS_linear_pk.txt', 'w')
 np.savetxt('./BXL_data/FLAMINGO_data/FLAMINGO_CLASS_linear_pk.txt', np.column_stack([k,Pk.reshape(-1,1)]))
 file.close()
 
 print(Pk_true[:,0])
-quit()
+#quit()
 pb.plot(k, Pk, label='CLASS Pk')
 pb.plot(Pk_true[:,0], Pk_true[:,1], label='FLAMINGO spectra (L1000N3600)')
 pb.title(r'Nonlinear $P(k)$ from CLASS using FLAMINGO cosmology', fontsize=10, wrap=True)

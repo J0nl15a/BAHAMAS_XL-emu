@@ -4,71 +4,49 @@ import pylab as pb
 
 class gpyHighResEmulator:
 
-    def __init__(self, P_k_data, kern=GPy.kern.RBF(9), consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(10), consist=False):
 
         self.data = P_k_data
 
-        if self.data.log == True:
-            HR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[100:, :], np.log10(self.data.P_k_nonlinear[100:, :]), kern)
-            HR_model.optimize()
-            y = 10**HR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
-        else:
-            HR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[100:, :], self.data.P_k_nonlinear[100:, :], kern)
-            HR_model.optimize()
-            y = HR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
+        HR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[100:, :], self.data.P_k_nonlinear_norm[100:, :], kern)
+        HR_model.optimize()
+        y = HR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
         midpoint = int(len(self.data.k_test)/2)
-        self.data.P_k_nonlinear[:,midpoint:][self.data.nan_mask[:,midpoint:]] = y[:,midpoint:][self.data.nan_mask[:,midpoint:]]
+        self.data.P_k_nonlinear_norm[:,midpoint:][self.data.nan_mask[:,midpoint:]] = y[:,midpoint:][self.data.nan_mask[:,midpoint:]]
 
         if isinstance(self.data.holdout, bool):
-            if self.data.log == True:
-                self.data.Y_train = np.log10(self.data.P_k_nonlinear)
-            else:
-                self.data.Y_train = self.data.P_k_nonlinear
+            self.data.Y_train = self.data.P_k_nonlinear_norm
         else:
-            self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
-            if self.data.log == True:
-                self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
-            else:
-                self.data.Y_train = np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0)
+            self.data.Y_test = 10**((self.data.P_k_nonlinear_norm[self.data.holdout, :]*self.data.std_Pk)+self.data.mean_Pk)
+            self.data.Y_train = np.delete(self.data.P_k_nonlinear_norm, self.data.holdout, axis=0)
         
         return
 
 class gpyLowResEmulator:
 
-    def __init__(self, P_k_data, kern=GPy.kern.RBF(9), consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(10), consist=False):
 
         self.data = P_k_data
 
-        if self.data.log == True:
-            LR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[50:100, :], np.log10(self.data.P_k_nonlinear[50:100, :]), kern)
-            LR_model.optimize()
-            y = 10**LR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
-        else:
-            LR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[50:100, :], self.data.P_k_nonlinear[50:100, :], kern)
-            LR_model.optimize()
-            y = LR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
+        LR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[50:100, :], self.data.P_k_nonlinear_norm[50:100, :], kern)
+        LR_model.optimize()
+        y = LR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
         midpoint = int(len(self.data.k_test)/2)
-        self.data.P_k_nonlinear[:,:midpoint][self.data.nan_mask[:,:midpoint]] = y[:,:midpoint][self.data.nan_mask[:,:midpoint]]
+        self.data.P_k_nonlinear_norm[:,:midpoint][self.data.nan_mask[:,:midpoint]] = y[:,:midpoint][self.data.nan_mask[:,:midpoint]]
         
         try:
-            assert True not in np.isnan(self.data.P_k_nonlinear[:,:midpoint])
+            assert True not in np.isnan(self.data.P_k_nonlinear_norm[:,:midpoint])
         except AssertionError:
-            mask = np.isnan(self.data.P_k_nonlinear[:,:midpoint])
-            self.data.P_k_nonlinear[:,:midpoint][mask] = 1
+            mask = np.isnan(self.data.P_k_nonlinear_norm[:,:midpoint])
+            self.data.P_k_nonlinear_norm[:,:midpoint][mask] = 1
             
         if isinstance(self.data.holdout, bool):
-            if self.data.log == True:
-                self.data.Y_train = np.log10(self.data.P_k_nonlinear)
-            else:
-                self.data.Y_train = self.data.P_k_nonlinear
+            self.data.Y_train = self.data.P_k_nonlinear_norm
         else:
-            self.data.Y_test = self.data.P_k_nonlinear[self.data.holdout, :]
-            if self.data.log == True:
-                self.data.Y_train = np.log10(np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0))
-            else:
-                self.data.Y_train = np.delete(self.data.P_k_nonlinear, self.data.holdout, axis=0)
+            self.data.Y_test = 10**((self.data.P_k_nonlinear_norm[self.data.holdout, :]*self.data.std_Pk)+self.data.mean_Pk)
+            self.data.Y_train = np.delete(self.data.P_k_nonlinear_norm, self.data.holdout, axis=0)
             
         return
 

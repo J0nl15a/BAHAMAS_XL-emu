@@ -5,73 +5,57 @@ import matplotlib.figure as fi
 from data_loader import bahamasXLDMOData
 from flamingo_data_loader import flamingoDMOData
 from gpy_emulator_improved import gpyImprovedEmulator
+import camb
 
-def parameter_sweep(parameters):
+def parameter_sweep(parameters, method='BXL_emu', bins=100):
 
-    pred = []
-    for p in range(parameters.shape[0]):
-        flamingo = flamingoDMOData(test_cosmology=test[p,:], log=False)
-        parameters_norm = (parameters-flamingo.design_min)/(flamingo.design_max-flamingo.design_min)
-        if p == 0:
-            flamingo.weights()
-            emulator_model = gpyImprovedEmulator(flamingo, 'variance_weights', fix_variance=True, ARD=True, save=True)
-        else:
-            emulator_model = gpyImprovedEmulator(flamingo, 'variance_weights', fix_variance=True, ARD=True, model_upload=True)
-        pred.append(emulator_model.pred)
-    
+    pred = np.zeros((parameters.shape[0], bins))
+
+    if method == 'BXL_emu':
+        flamingo = flamingoDMOData(test_cosmology=parameters[0,:])
+        flamingo.weights()
+        emulator_model = gpyImprovedEmulator(flamingo, 'variance_weights_no', error=False, fix_variance=False, ARD=True, save=True)
+        pred[0,:] = emulator_model.pred
+
+        flamingo_sweep = flamingoDMOData(test_cosmology=parameters[1:,:])
+        emulator_model_sweep = gpyImprovedEmulator(flamingo_sweep, 'variance_weights_no', error=False, fix_variance=False, ARD=True, model_upload=True)
+        pred[1:,:] = emulator_model_sweep.pred
+            
     return pred
 
 if __name__ == "__main__":
 
-    f = flamingoDMOData(log=False)
-    Omega_m_dist = st.uniform(f.design_min[0], f.design_max[0]-f.design_min[0])
-    f_b_dist = st.uniform(f.design_min[1], f.design_max[1]-f.design_min[1])
-    h_0_dist = st.uniform(f.design_min[2], f.design_max[2]-f.design_min[2])
-    n_s_dist = st.uniform(f.design_min[3], f.design_max[3]-f.design_min[3])
-    A_s_dist = st.uniform(f.design_min[4], f.design_max[4]-f.design_min[4])
-    w_0_dist = st.uniform(f.design_min[5], f.design_max[5]-f.design_min[5])
-    w_a_dist = st.uniform(f.design_min[6], f.design_max[6]-f.design_min[6])
-    Omega_nu_dist = st.uniform(f.design_min[7], f.design_max[7]-f.design_min[7])
-    alpha_s_dist = st.uniform(f.design_min[8], f.design_max[8]-f.design_min[8])
+    method = 'BXL_emu'
 
-    params = np.linspace(0,1,10)
-    params = (params*(f.design_max[8]-f.design_min[8]))+f.design_min[8]
+    if method == 'BXL_emu':
+        f = flamingoDMOData()
+        f.weights()
+
+        params = np.linspace(0,1,10)
+        params = (params*(f.design_max[7]-f.design_min[7]))+f.design_min[7]
+        #params = np.logspace(np.log10(f.design_min[9]), np.log10(f.design_max[9]), 10)
     
-    test = np.tile(f.flamingo_parameters, 11).reshape(11,-1)
-    print(test)
-    Omega_m_samples = Omega_m_dist.rvs(1)
-    f_b_samples = f_b_dist.rvs(1)
-    h_0_samples = h_0_dist.rvs(1)
-    n_s_samples = n_s_dist.rvs(1)
-    A_s_samples = A_s_dist.rvs(1)
-    w_0_samples = w_0_dist.rvs(1)
-    w_a_samples = w_a_dist.rvs(1)
-    Omega_nu_samples = Omega_nu_dist.rvs(1)
-    alpha_s_samples = alpha_s_dist.rvs(9)
-    print(Omega_m_samples)
-    #test[1,0] = Omega_m_samples
-    #test[2,1] = f_b_samples
-    #test[3,2] = h_0_samples
-    #test[4,3] = n_s_samples
-    #test[5,4] = A_s_samples
-    #test[6,5] = w_0_samples
-    #test[7,6] = w_a_samples
-    #test[8,7] = Omega_nu_samples
-    #test[1:,8] = alpha_s_samples
-    test[1:,8] = params
-    #test[1:,6] = 0
-    #print(flamingo.design_min)
-    #print(flamingo.design_max)
-    print(test)
-    pred = parameter_sweep(test)
-    print(test)
+        test = np.tile(f.flamingo_parameters[8], 11).reshape(11,-1)
+        print(test.shape)
+        test[1:,7] = params
+        
+        print(test)
+        print(test.shape)
+        pred = parameter_sweep(test)
+        print(test)
+
+    elif method == 'CAMB':
+        pars = camb.set_params(H0=67.5, ombh2=0.022, omch2=0.122, mnu=0.06, As=2e-9, ns=0.965, halofit_version='mead')
+
     print(pred)
 
     for i in range(len(pred)):
         if i==0:
-            pb.plot(f.k_test, pred[0], color='k', label='FLAMINGO')
+            pb.plot(f.k_test, f.Y_test[8,:], color='k', label='FLAMINGO (true)')
+            pb.plot(f.k_test, pred[0], color='k', linestyle='dashed', label='FLAMINGO (predicted)')
         else:
-            pb.plot(f.k_test, pred[i], label=rf'$\alpha_s$ = {params[i-1]}')
+            #pb.plot(f.k_test, pred[i], label=rf'$log_{10}$ (DM particle masses) = {np.log10(params[i-1])}')
+            pb.plot(f.k_test, pred[i], label=rf'$\Omega_\nu h^2$ = {params[i-1]:06f}')
 
     pb.xlabel(r'$k \: [1/Mpc]$', fontsize=15)
     pb.ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
@@ -83,14 +67,18 @@ if __name__ == "__main__":
     pb.savefig(f'./Plots/parameter_sweep_test.png', dpi=1200)
     pb.clf()
 
-    for i in range(len(pred)-1):
-        pb.plot(f.k_test, pred[i+1]/pred[0], label=rf'$\alpha_s$ = {params[i-1]}')
+    for i in range(len(pred)):
+        if i==0:
+            pb.hlines(xmin=-1, xmax=100, y=1, color='k', label=f'FLAMINGO ({test[0,0]})')
+        else:
+            #pb.plot(f.k_test, pred[i]/pred[0], label=rf'$log_{10}$ (DM particle masses) = {np.log10(params[i-1])}')
+            pb.plot(f.k_test, pred[i]/pred[0], label=rf'$\Omega_\nu h^2$ = {params[i-1]:06f}')
     pb.xlabel(r'$k \: [1/Mpc]$', fontsize=15)
     pb.ylabel(r'$P(k) \: [Mpc^3]$', fontsize=15)
     pb.xscale('log')
-    pb.yscale('log')
+    pb.xlim(left=1e-2, right=15)
     pb.title(f'Parameter sweeps predictions/FLAMINGO')
-    pb.legend(loc='upper left', fontsize=6)
+    pb.legend(loc='lower left', fontsize=6)
     pb.savefig(f'./Plots/parameter_sweep_residual.png', dpi=1200)
     pb.clf()
     
