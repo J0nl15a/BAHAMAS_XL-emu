@@ -6,7 +6,7 @@ from classy import Class
 import camb
 from scipy import interpolate
 
-def bahamasxl_hypercube_sampling(number_of_samples, parameters=np.arange(10), save=False, labels=[], method='CLASS'):
+def bahamasxl_hypercube_sampling(number_of_samples, parameters=np.arange(9), save=False, labels=[], method='CLASS'):
 
     resample = np.full((number_of_samples, len(parameters)), True)
     test_parameters = np.zeros((number_of_samples, len(parameters)))
@@ -16,7 +16,9 @@ def bahamasxl_hypercube_sampling(number_of_samples, parameters=np.arange(10), sa
     bxl_As = bxl_parameters[:, 4].copy()
     sig8 = np.loadtxt('./BXL_data/slhs_nested_3x_Om_fb_h_ns_sigma8_w0_wa_Omnuh2_alphas_fgasfb.txt', max_rows=150, usecols=4)
     bxl_parameters[:, 4] = sig8
-
+    DM_particle_mass = np.loadtxt('./BXL_data/DM_masses.txt').reshape(-1,1)
+    bxl_parameters = np.hstack((bxl_parameters, DM_particle_mass))
+    
     test_parameters = np.random.uniform([min(bxl_parameters[:,i]) for i in parameters], [max(bxl_parameters[:,i]) for i in parameters], (number_of_samples,len(parameters)))
 
     while True in resample:
@@ -24,6 +26,9 @@ def bahamasxl_hypercube_sampling(number_of_samples, parameters=np.arange(10), sa
         for s in range(number_of_samples):
             for p in range(len(parameters)):
                 if test_parameters[s,p] in bxl_parameters[:,p]:
+                    #if p==9:
+                        #test_parameters[s,p] = np.random.uniform(np.log10(min(bxl_parameters[:,p])), np.log10(max(bxl_parameters[:,p])), 1)
+                    #else:
                     test_parameters[s,p] = np.random.uniform(min(bxl_parameters[:,p]), max(bxl_parameters[:,p]), 1)
                 resample[s,p]=False
 
@@ -151,15 +156,12 @@ def hypercube_plot(data, parameter_labels, save_to, title, dim=(10,10), marker_c
                     for i,d in enumerate(data):
                         if d.ndim>1:
                             ax[x,y].scatter(d[:, y], d[:, x], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
-                            #ax[x,y].scatter(d[:, y] if y!=4 else d[:, -1], d[:, x] if x!=4 else d[:, -1], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
                         else:
                             ax[x,y].scatter(d[y], d[x], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
-                            #ax[x,y].scatter(d[y] if y!=4 else d[-1], d[x] if x!=4 else d[-1], s=.5, color=marker_colour[i], label=marker_label[i] if y==0 and x==1 else None)
 
                 #Plotting data points when only one colour/label is applied
                 else:
                     ax[x,y].scatter(data[:, y], data[:, x], s=.5, color=marker_colour[0], label=marker_label[0] if y==0 and x==1 else None)
-                    #ax[x,y].scatter(data[:, y] if y!=4 else d[:, -1], data[:, x] if x!=4 else d[:, -1], s=.5, color=marker_colour[0], label=marker_label[0] if y==0 and x==1 else None)
 
                 #Assigning axis tick values on the plot from the values of the parameter_labels dict
                 if y==0:
@@ -190,6 +192,10 @@ def hypercube_plot(data, parameter_labels, save_to, title, dim=(10,10), marker_c
             else:
                 ax[x,y].remove()
 
+        if y==9:
+            ax[x,y].set_xscale('log')
+            ax[x,y].set_yscale('log')
+                
     #Removing whitespace
     fig.subplots_adjust(wspace=0,hspace=0)
     #Figure title
@@ -325,24 +331,26 @@ if __name__ == "__main__":
     from flamingo_data_loader import flamingoDMOData
     import random
     hr = random.randint(100,149)
-    ir = 0#random.randint(0,49)
+    ir = random.randint(0,49)
     lr = random.randint(50,99)
     flam = flamingoDMOData()
 
     method = 'CLASS'
     test = bahamasxl_hypercube_sampling(1, np.arange(9), method=method)
     print(test)
+
+    print(flam.parameters.shape)
     for x in range(test.shape[1]-1):
         if np.any(np.isin(test[:,x], flam.parameters[:,x])):
             print('FAIL')
             
     
-    labels = {r'$\Omega_m$':[.20,.25,.30,.35], r'$f_b$':[.14,.15,.16,.17], r'$h_0$':[.64,.7,.76], r'$n_s$':[.95,.97,.99], r'$\sigma_8$':[0.72,0.80,0.88], r'$w_0$':[-.7,-.9,-1.1], r'$w_a$':[.2,-.5,-1.2], r'$\Omega_{\nu}h^2$':[.005,.003,.001], r'$\alpha_s$':[.025,0,-.025]}#, r'$\frac{f_{gas}}{f_b}$':[.4,.5,.6]}
+    labels = {r'$\Omega_m$':[.20,.25,.30,.35], r'$f_b$':[.14,.15,.16,.17], r'$h_0$':[.64,.7,.76], r'$n_s$':[.95,.97,.99], r'$\sigma_8$':[0.72,0.80,0.88], r'$w_0$':[-.7,-.9,-1.1], r'$w_a$':[.2,-.5,-1.2], r'$\Omega_{\nu}h^2$':[.005,.003,.001], r'$\alpha_s$':[.024,.006,-.012], r'$DM_{mass}$':[1e9,1e10,1e11]}#, r'$\frac{f_{gas}}{f_b}$':[.4,.5,.6]}
     marker_colour=['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:pink']
     marker_label=['Intermediate', 'Low', 'High', 'Test', 'FLAMINGO']
 
     #hypercube = hypercube_plot(data, parameter_labels=labels, save_to='./Plots/BXL_hypercube.png', title='BAHAMAS XL Latin hypercube design', marker_colour=['tab:red'], marker_label=['All data'])
-    hypercube = hypercube_plot(dim=(9,9), data=[flam.parameters[:50, :], flam.parameters[50:100, :], flam.parameters[100:, :], test, flam.flamingo_parameters], parameter_labels=labels, save_to='./Plots/BXL_hypercube_test.png', title='BAHAMAS XL Latin hypercube design w/ test points and FLAMINGO', marker_colour=marker_colour, marker_label=marker_label)
+    hypercube = hypercube_plot(dim=(10,10), data=[flam.parameters[:50, :], flam.parameters[50:100, :], flam.parameters[100:, :], test, flam.flamingo_parameters], parameter_labels=labels, save_to='./Plots/BXL_hypercube_test.png', title='BAHAMAS XL Latin hypercube design w/ test points and FLAMINGO', marker_colour=marker_colour, marker_label=marker_label)
     #hypercube = hypercube_plot(test, parameter_labels=labels, save_to='./Plots/BXL_hypercube_alltest.png', title='BAHAMAS XL Latin hypercube design', marker_colour=['tab:red'], marker_label=['Test data'])
 
     for a,b in enumerate([flam.As[:50], flam.As[50:100], flam.As[100:], test[:,-1], flam.flamingo_As]):

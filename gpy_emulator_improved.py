@@ -138,10 +138,6 @@ class gpyImprovedEmulator:
                 
             if self.data.X_test.ndim > 1:
                 model_output = self.model._raw_predict(self.data.X_test.reshape(len(self.data.X_test), -1))
-                '''for t in range(12):
-                    model_output = self.model._raw_predict(self.data.X_test[t, :].reshape(1,-1))
-                    print(10**(self.data.normalise(undo = model_output[0])))
-                quit()'''
             else:
                 model_output = self.model._raw_predict(self.data.X_test.reshape(1, -1))
             if self.data.log == True:
@@ -158,14 +154,12 @@ class gpyImprovedEmulator:
             if self.data.X_test.ndim > 1:
                 #self.pred[:, i] = self.y.reshape(-1)
                 self.pred = self.y
-                #if isinstance(self.data.holdout, bool):
                 if error == True:
                     #self.error[:, i] = self.y.reshape(-1)/self.data.Y_test[:, i]
                     self.error = self.y/self.data.Y_test
             else:
                 #self.pred[i] = self.y
                 self.pred = self.y
-                #if isinstance(self.data.holdout, bool):
                 if error == True:
                     if isinstance(self.data.holdout, bool):
                         if flamingo == True:
@@ -236,15 +230,15 @@ class gpyImprovedEmulator:
                     
                 #ax1.plot(emulator.data.k_test[unmasked_indicies], emulator.data.Y_test[m, unmasked_indicies], color=model_lines[m], label=(f'L{boost.flamingo_sims[m][0]}N{boost.flamingo_sims[m][1]})'))
                 ax1.plot(emulator.data.k_test[unmasked_indicies], emulator.data.Y_test[m, unmasked_indicies], color=model_lines[m], linestyle='dashed', label=f'Original data' if m==0 else None)
-                ax2.plot(emulator.data.k_test[unmasked_indicies], emulator.error[m, unmasked_indicies], color=model_lines[m], label=(f'L{boost.flamingo_sims[m][0]}N{boost.flamingo_sims[m][1]} error' if m<4 else f'L{boost.flamingo_sims[m+1][0]}N{boost.flamingo_sims[m+1][1]} error'))
-                ax1.plot(emulator.data.k_test, emulator.pred[m, :], color=model_lines[m], label=(f'Predicted P(k) for FLAMINGO cosmology (L{boost.flamingo_sims[m][0]}N{boost.flamingo_sims[m][1]})' if m<4 else f'Predicted P(k) for FLAMINGO cosmology (L{boost.flamingo_sims[m+1][0]}N{boost.flamingo_sims[m+1][1]})'))
+                ax2.plot(emulator.data.k_test[unmasked_indicies], emulator.error[m, unmasked_indicies], color=model_lines[m], label=(f'L{boost.flamingo_sims[m][0]}N{boost.flamingo_sims[m][1]}' if m<4 else f'L{boost.flamingo_sims[m+1][0]}N{boost.flamingo_sims[m+1][1]}'))
+                ax1.plot(emulator.data.k_test, emulator.pred[m, :], color=model_lines[m], label=(f'L{boost.flamingo_sims[m][0]}N{boost.flamingo_sims[m][1]}' if m<4 else f'L{boost.flamingo_sims[m+1][0]}N{boost.flamingo_sims[m+1][1]}'))
       
             #ax1.plot(emulator.data.k_test, emulator.pred, color='k', label=('Predicted P(k) for FLAMINGO cosmology'))
                     
             fig.suptitle(f'GPy test for FLAMINGO (kernel = {name})')
-            ax1.legend(loc='upper left', fontsize=6)
+            ax1.legend(loc='upper left', fontsize=6, title='Predicted P(k) for FLAMINGO cosmology', ncol=2)
                     
-            ax2.legend(loc='lower left', fontsize=6)
+            ax2.legend(loc='lower left', fontsize=6, title='Predicted/Original', ncol=2)
             ax2.set_ylim(top=1.2, bottom=0.8)
 
 
@@ -270,9 +264,9 @@ class gpyImprovedEmulator:
 if __name__ == '__main__':
     from flamingo_data_loader import flamingoDMOData
     
-    model=np.random.randint(100,150)
+    model=104#np.random.randint(100,150)
     flamingo=False
-    boost = flamingoDMOData(pk='powmes', lin='class', log=True, sigma8=True, holdout=model)
+    boost = flamingoDMOData(pk='powmes', lin='class', flamingo_lin='class', log=True, sigma8=True, cutoff=(.03, 20), holdout=model)
     #boost.weights()
     print(boost.X_train)
     print(boost.Y_train)
@@ -287,7 +281,7 @@ if __name__ == '__main__':
     print(boost.Y_test)
     #emulator.pred = 10**((emulator.pred*std_Pk)+mean_Pk)
     #emulator.error = emulator.pred/emulator.data.Y_test
-    emulator.plot('ARD')
+    #emulator.plot('ARD')
 
     print(emulator.weights)
     #for i in range(50):
@@ -303,23 +297,26 @@ if __name__ == '__main__':
     #pb.savefig(f'./Plots/emulator_computed_weights.png', dpi=1200)
     #pb.clf()
     print(boost.Y_train)
-    quit()
+    #quit()
 
     test_error=[]
+    test_std = []
     tests = [('HR', 100, 150), ('LR', 50, 100), ('IR', 0, 50)]
     for k in range(len(tests)):
         error = []
         for m in range(tests[k][1], tests[k][2]):
-            model_boost = flamingoDMOData(pk='powmes', lin='camb', log=True, holdout=m, sigma8=True)
+            model_boost = flamingoDMOData(pk='powmes', lin='camb', flamingo_lin='camb', log=True, holdout=m, sigma8=True, cutoff=(.03, 20))
             model_boost.weights()
             model_emulator = gpyImprovedEmulator(model_boost, 'variance_weights_no', fix_variance=False, ARD=True, flamingo=flamingo)
             print(model_emulator.error)
             error.append(model_emulator.error)
 
         error = np.array(error)
-        avg_error = np.median(error, axis=0)
+        avg_error = np.mean(error, axis=0)
+        std_error = np.std(error, axis=0)
         print(avg_error)
         test_error.append(avg_error)
+        test_std.append(std_error)
         
     pb.hlines(y=1.000, xmin=-1, xmax=int(max(emulator.data.k_test)+1) if max(emulator.data.k_test)>9.99 else 10, color='k', linestyles='solid', alpha=0.5, label=None)
     pb.hlines(y=0.990, xmin=-1, xmax=int(max(emulator.data.k_test)+1) if max(emulator.data.k_test)>9.99 else 10, color='k', linestyles='dashed', alpha=0.5, label='1% error')
@@ -346,6 +343,10 @@ if __name__ == '__main__':
     pb.plot(emulator.data.k_test, test_error[2].reshape(-1,1), color='tab:blue', label=f'Average {tests[2][0]} error')
     pb.plot(emulator.data.k_test, test_error[0].reshape(-1,1), color='tab:green', label=f'Average {tests[0][0]} error')
     pb.plot(emulator.data.k_test, test_error[1].reshape(-1,1), color='tab:orange', label=f'Average {tests[1][0]} error')
+
+    pb.fill_between(emulator.data.k_test, (test_error[2].reshape(-1,1)+test_std[2].reshape(-1,1)).flatten(), (test_error[2].reshape(-1,1)-test_std[2].reshape(-1,1)).flatten(), color='tab:blue', linewidth=0, alpha=.5)#, label=f'1 $\sigma$')
+    pb.fill_between(emulator.data.k_test, (test_error[0].reshape(-1,1)+test_std[0].reshape(-1,1)).flatten(), (test_error[0].reshape(-1,1)-test_std[0].reshape(-1,1)).flatten(), color='tab:green', linewidth=0, alpha=.5, label=f'1 $\sigma$')
+    pb.fill_between(emulator.data.k_test, (test_error[1].reshape(-1,1)+test_std[1].reshape(-1,1)).flatten(), (test_error[1].reshape(-1,1)-test_std[1].reshape(-1,1)).flatten(), color='tab:orange', linewidth=0, alpha=.5)#, label=f'1 $\sigma$')
     
     pb.title(f'Average error on all model resolutions')
     pb.xlabel(r'$k \: [1/Mpc]$', fontsize=10)
