@@ -1,136 +1,56 @@
 import numpy as np
-from data_loader import BXL_DMO_Pk
 import GPy
-import random
 import pylab as pb
-from gpy_emulator import gpy_emulator
 
-class gpy_HR_emulator:
+class gpyHighResEmulator:
 
-    def __init__(self, P_k_data, res, k, kern=GPy.kern.RBF(9), test=False, consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(10), consist=False):
+
         self.data = P_k_data
 
-        for i, t in enumerate(res):
-            HR = 100
-        
-            if t == 'Low':
-                start = 50
-                end = 100
-            elif t == 'Med':
-                start = 0
-                end = 50
-            elif t == 'High':
-                start = 100
-                end = 150
+        HR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[100:, :], self.data.P_k_nonlinear_norm[100:, :], kern)
+        HR_model.optimize()
+        y = HR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
-            if test == False:
-                pass
-            else:
-                if self.data.test_models in range(100):
-                    HR -= 1
-                if self.data.test_models in range(start, end):
-                    end -= 1
-                elif self.data.test_models < start:
-                    start -= 1
-                    end -= 1
+        midpoint = int(len(self.data.k_test)/2)
+        self.data.P_k_nonlinear_norm[:,midpoint:][self.data.nan_mask[:,midpoint:]] = y[:,midpoint:][self.data.nan_mask[:,midpoint:]]
 
-            HR_model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[HR:, :], self.data.Y_train[HR:, :], kern)
-            HR_model.optimize()
-            y = HR_model._raw_predict(self.data.X_train[start:end, :].reshape((end-start), -1))[0]
-            #print(y[:, k:])
-            
-            self.data.Y_train[start:end, k[i]:] = y[:, k[i]:]
-
-        if test == False:
-            pass
+        if isinstance(self.data.holdout, bool):
+            self.data.Y_train = self.data.P_k_nonlinear_norm
         else:
-            z = HR_model._raw_predict(self.data.X_test.reshape(1, -1))[0][0]
-            if consist == True:
-                print('HR Consistency test')
-                print(self.data.Y_test)
-                print(10**z)
-                pb.plot(self.data.k_test, self.data.Y_test, label='Test data (Low res)')
-                pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='HR predicted test data')
-                pb.title('HR Consistency test')
-                pb.xscale('log')
-                pb.yscale('log')
-                pb.xlabel('k (1/Mpc)')
-                pb.xlabel('P(k) (Mpc^3)')
-                pb.legend()
-                pb.savefig('./Plots/emu_ext_test_HR.pdf', dpi=800)
-                pb.clf()
-            for j in range(test, 15):
-                self.data.Y_test[j] = 10**(z[j])
+            self.data.Y_test = 10**((self.data.P_k_nonlinear_norm[self.data.holdout, :]*self.data.std_Pk)+self.data.mean_Pk)
+            self.data.Y_train = np.delete(self.data.P_k_nonlinear_norm, self.data.holdout, axis=0)
         
         return
 
-class gpy_LR_emulator:
+class gpyLowResEmulator:
 
-    def __init__(self, P_k_data, res, k, kern=GPy.kern.RBF(9), test=False, consist=False):
+    def __init__(self, P_k_data, kern=GPy.kern.RBF(10), consist=False):
+
         self.data = P_k_data
 
-        for i, t in enumerate(res):
-            LR = [50, 100]
+        LR_model = GPy.models.GPHeteroscedasticRegression(self.data.parameters_norm[50:100, :], self.data.P_k_nonlinear_norm[50:100, :], kern)
+        LR_model.optimize()
+        y = LR_model._raw_predict(self.data.parameters_norm.reshape(150, -1))[0]
 
-            if t == 'High':
-                start = 100
-                end = 150
-            elif t == 'Med':
-                start = 0
-                end = 50
-            elif t == 'Low':
-                start = 50
-                end = 100
-            
-            if test == False:
-                pass
-            else:
-                if self.data.test_models in range(50, 100):
-                    LR[1] -= 1
-                elif self.data.test_models in range(50):
-                    LR[0] -= 1
-                    LR[1] -= 1
-
-                if self.data.test_models in range(start, end):
-                    end -= 1
-                elif self.data.test_models < start:
-                    start -= 1
-                    end -= 1
-
-            LR_model = GPy.models.GPHeteroscedasticRegression(self.data.X_train[LR[0]:LR[1], :], self.data.Y_train[LR[0]:LR[1], :], kern)
-            LR_model.optimize()
-            print(self.data.X_train[start:end, :].shape)
-            y = LR_model._raw_predict(self.data.X_train[start:end, :].reshape((end-start), -1))[0]
-            #print(y[:, :k])
+        midpoint = int(len(self.data.k_test)/2)
+        self.data.P_k_nonlinear_norm[:,:midpoint][self.data.nan_mask[:,:midpoint]] = y[:,:midpoint][self.data.nan_mask[:,:midpoint]]
         
-            self.data.Y_train[start:end, :k[i]] = y[:, :k[i]]
-            self.data.Y_train[start:end, 0] = 0
-
-        if test == False:
-            pass
+        try:
+            assert True not in np.isnan(self.data.P_k_nonlinear_norm[:,:midpoint])
+        except AssertionError:
+            mask = np.isnan(self.data.P_k_nonlinear_norm[:,:midpoint])
+            self.data.P_k_nonlinear_norm[:,:midpoint][mask] = 1
+            
+        if isinstance(self.data.holdout, bool):
+            self.data.Y_train = self.data.P_k_nonlinear_norm
         else:
-            z = LR_model._raw_predict(self.data.X_test.reshape(1, -1))[0][0]
-            if consist == True:
-                print('LR Consistency test')
-                print(self.data.Y_test)
-                print(10**z)
-                pb.plot(self.data.k_test, self.data.Y_test, label='Test data (High res)')
-                pb.plot(self.data.k_test, (10**z).reshape(-1,1), label='LR predicted test data')
-                pb.title('LR Consistency test')
-                pb.xscale('log')
-                pb.yscale('log')
-                pb.xlabel('k (1/Mpc)')
-                pb.xlabel('P(k) (Mpc^3)')
-                pb.legend()
-                pb.savefig('./Plots/emu_ext_test_LR.pdf', dpi=800)
-                pb.clf()
-            for j in range(test):
-                self.data.Y_test[j] = 10**(z[j])
-            self.data.Y_test[0] = 1
+            self.data.Y_test = 10**((self.data.P_k_nonlinear_norm[self.data.holdout, :]*self.data.std_Pk)+self.data.mean_Pk)
+            self.data.Y_train = np.delete(self.data.P_k_nonlinear_norm, self.data.holdout, axis=0)
             
         return
 
-class gpy_MR_step_emulator:
+class gpyMedResStepEmulator:
 
     def __init__(self, P_k_data, HL=False, LH=False, pc=0.999, samp=50, step=20, mcmc=1000):
         self.test_models = P_k_data.test_models
@@ -178,56 +98,24 @@ class gpy_MR_step_emulator:
                                 
                                 
 if __name__ == "__main__":
-    n = random.randint(50,99)
-    m = random.randint(100,149)
-    nbk_boost = BXL_DMO_Pk(n, 100, pk='nbk-rebin-std', lin='rebin')
-    nb = BXL_DMO_Pk(m, 100, pk='nbk-rebin-std', lin='rebin')
-    print("Default Y_train:")
-    print(nbk_boost.Y_train[24])
-    print(nbk_boost.Y_train[79])
-    print(nbk_boost.Y_train[124])
-    lr = gpy_LR_emulator(nb, ['Med', 'Low', 'High'], [2, 1, 3], test=1, consist=True).data
-    HR = gpy_HR_emulator(nbk_boost, ['Low'], [len(nbk_boost.k_test)-1], test=len(nbk_boost.k_test)-1, consist=True).data
-    print("HR corrected Y_train:")
-    print(HR.Y_train[24])
-    print(HR.Y_train[79])
-    print(HR.Y_train[124])
-    LR = gpy_LR_emulator(nbk_boost, ['Med', 'Low', 'High'], [2, 1, 3], test=1).data
-    print("LR corrected Y_train:")
-    print(LR.Y_train[24])
-    print(LR.Y_train[79])
-    print(LR.Y_train[124])
+    import random
+    #from data_loader import bahamasXLDMOData
+    from flamingo_data_loader import flamingoDMOData
 
-    print("Default Y_train again:")
-    print(nbk_boost.Y_train[24])
-    print(nbk_boost.Y_train[79])
-    print(nbk_boost.Y_train[124])
+    test = random.randint(100,149)
+    boost = flamingoDMOData(pk='nbk-rebin-std', lin='rebin', log=False, holdout=test)
+    #boost.weights(plot_weights=True)
+    #emulator = gpyImprovedEmulator(boost, 'variance_weights', fix_variance=True, ARD=True, flamingo=False)
+    #emulator.plot('ARD')
 
-    gpy = gpy_emulator(nbk_boost, GPy.kern.RBF(9, ARD=True))
+    HR_model = GPy.models.GPHeteroscedasticRegression(boost.parameters_norm[100:, :], boost.P_k_nonlinear[100:, :], GPy.kern.RBF(9))
+    HR_model.optimize()
+    y = HR_model._raw_predict(boost.parameters_norm[test, :].reshape(1,-1))[0]
 
-    pb.plot(nbk_boost.k_test, nbk_boost.Y_test, color='b')
-    pb.plot(nbk_boost.k_test, gpy.y.reshape(-1,1), color='r')
+    pb.plot(boost.k_test, boost.P_k_nonlinear[test, :], label='True Pk')
+    pb.plot(boost.k_test, y.reshape(15), label='Predicted Pk', linestyle='dotted')
     pb.xscale('log')
     pb.yscale('log')
-    pb.savefig('./Plots/emu_ext_test.pdf', dpi=800)
-    pb.clf()
-
-    pb.hlines(y=1.000, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='solid', alpha=0.5, label=None)
-    pb.hlines(y=0.990, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label='1% error')
-    pb.hlines(y=1.010, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dashed', alpha=0.5, label=None)
-    pb.hlines(y=0.950, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label='5% error')
-    pb.hlines(y=1.050, xmin=-1, xmax=max(nbk_boost.k_test)+2, color='k', linestyles='dotted', alpha=0.5, label=None)
-    pb.plot(nbk_boost.k_test, gpy.error.reshape(-1,1))
-    pb.xscale('log')
-    pb.savefig('./Plots/emu_ext_test_err.pdf', dpi=800)
-    pb.clf()
-                        
-    for i in range(50):
-        pb.plot(nbk_boost.k_test, 10**nbk_boost.Y_train[i, :], color='tab:blue')
-        pb.plot(nbk_boost.k_test, 10**nbk_boost.Y_train[i+49, :], color='tab:orange')
-        pb.plot(nbk_boost.k_test, 10**nbk_boost.Y_train[i+99, :], color='tab:green')
-    pb.plot(nbk_boost.k_test, nbk_boost.Y_test, color='tab:orange')
-    pb.xscale('log')
-    pb.yscale('log')
-    pb.savefig('./Plots/emu_ext.pdf', dpi=800)
+    pb.legend()
+    pb.savefig('./Plots/HR_test.png', dpi=1200)
     pb.clf()

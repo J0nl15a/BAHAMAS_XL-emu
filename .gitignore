@@ -1,0 +1,19 @@
+#Ignore all buffer files
+*~
+
+#Ignore Thumbs.db file
+Thumbs.db
+
+#Ignore other emulators
+CosmicEmu/
+EuclidEmulator2-pywrapper/
+
+#Ignore batch scripts directory
+batch_scripts/
+
+#Ignore __pycache__/ directory
+__pycache__/
+
+#Ignore SLURM output scripts
+*.out
+*.err
